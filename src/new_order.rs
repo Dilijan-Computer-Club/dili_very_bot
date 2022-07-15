@@ -28,9 +28,10 @@ pub enum State {
 }
 
 pub fn schema() -> UpdateHandler<Error> {
-    Update::filter_message()
+    let message_handler = Update::filter_message()
         .branch(dptree::case![State::Start]
-                .endpoint(receive_description))
+                .endpoint(receive_description));
+    message_handler
 }
 
 pub async fn send_initial_message(bot: AutoSend<Bot>, chat_id: ChatId) -> HandlerResult {
@@ -46,14 +47,13 @@ async fn receive_description(
 ) -> HandlerResult {
     log::info!("-> receive_description");
     if let Some(text) = msg.text() {
-        // bot.send_message(dialogue.chat_id(),
-        //     format!("Your message: {text}")).await?;
         log::info!("Description: {text}");
-        let order = Order::from_tg_msg(&msg)?;
-        db.add_order(&order)?;
+        let mut order = Order::from_tg_msg(&msg)?;
+        let order_id = db.add_order(&order).await?;
+        order.id = Some(order_id);
+
         order.send_message_for(&mut bot, order.from.id, msg.chat.id).await?;
         dialogue.update(crate::State::Start).await?;
-        // dialogue.exit().await?;
     } else {
         bot.send_message(dialogue.chat_id(), "No description").await?;
     }

@@ -47,5 +47,19 @@ impl OrderAction {
             OrderAction::Delete          => "delete",
         }
     }
-}
 
+    /// Converts str to OrderAction, returns None if it doesn't
+    /// match any of the variant ids
+    pub fn maybe_from_id<S: AsRef<str>>(s: S) -> Option<OrderAction> {
+        match s.as_ref() {
+            "publish"           => Some(OrderAction::Publish),
+            "cancel"            => Some(OrderAction::Cancel),
+            "assign_to_me"      => Some(OrderAction::AssignToMe),
+            "unassign"          => Some(OrderAction::Unassign),
+            "mark_as_delivered" => Some(OrderAction::MarkAsDelivered),
+            "confirm_delivery"  => Some(OrderAction::ConfirmDelivery),
+            "delete"            => Some(OrderAction::Delete),
+            _other              => None
+        }
+    }
+}
