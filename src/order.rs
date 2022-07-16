@@ -15,6 +15,12 @@ type DateTime = chrono::DateTime<Offset>;
 #[repr(transparent)]
 pub struct OrderId(pub u64);
 
+impl fmt::Display for OrderId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub enum Role {
     Owner,
@@ -207,11 +213,25 @@ impl Order {
         dumb_intersection(allowed_actions, available_actions)
     }
 
+    pub fn public_actions(&self) -> Vec<OrderAction> {
+        let role = Role::UnrelatedUser;
+        let available_actions = self.available_actions();
+        let allowed_actions = role.allowed_actions();
+
+        dumb_intersection(allowed_actions, available_actions)
+    }
+
+    /// Send a message that shows this order
+    /// Arguments
+    ///
+    /// public:
+    ///   If the message is for a public chat
     pub async fn send_message_for(
         &self,
         bot: &mut AutoSend<Bot>,
         uid: UserId,
-        chat_id: ChatId
+        chat_id: ChatId,
+        public: bool,
     ) -> Result<(), Error> {
         let bot = bot.parse_mode(teloxide::types::ParseMode::Html);
         let description = &self.desc_msg.text;
@@ -219,7 +239,14 @@ impl Order {
         let user_id = self.from.id;
         let order_id = self.id
             .ok_or("Could not make action for order without id")?;
-        let actions = self.user_actions(uid);
+
+        let actions =
+            if public {
+                self.public_actions()
+            } else { 
+                self.user_actions(uid)
+            };
+
         let specific_actions: Vec<SpecificAction> =
             actions.into_iter()
             .map(|action| SpecificAction {
