@@ -8,8 +8,6 @@ use crate::error::Error;
 use crate::order_action::OrderAction;
 use crate::urgency::Urgency;
 
-use chrono;
-
 type Offset = chrono::offset::Utc;
 type DateTime = chrono::DateTime<Offset>;
 
@@ -121,7 +119,7 @@ impl Order {
         let msg = TgMsg::from_tg_msg(tg_msg)?;
         let from = match tg_msg.from() {
             Some(user) => user,
-            None => return Err(format!("No 'from' in message").into()),
+            None => return Err("No 'from' in message".into()),
         };
 
         Ok(Order {
@@ -349,13 +347,13 @@ fn format_username(user: &User) -> String {
     let name = if let Some(last_name) = &user.last_name {
         format!("{first_name} {last_name}")
     } else {
-        format!("{first_name}")
+        first_name.to_string()
     };
 
     if let Some(username) = &user.username {
         format!("@{username} {name}")
     } else {
-        format!("{name}")
+        name
     }
 }
 

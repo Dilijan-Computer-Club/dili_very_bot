@@ -1,4 +1,5 @@
 #![feature(result_flattening)]
+#![allow(clippy::match_like_matches_macro)]
 
 use std::error::Error;
 use teloxide::{
@@ -6,11 +7,9 @@ use teloxide::{
     payloads::SendMessageSetters,
     types::{
         InlineKeyboardButton, InlineKeyboardMarkup,
-        InlineQueryResultArticle, InputMessageContent,
-        InputMessageContentText,
     },
     dispatching::{
-        dialogue::{self, InMemStorage, Storage},
+        dialogue::{self, InMemStorage},
         UpdateHandler
     },
     utils::command::BotCommands,
@@ -96,7 +95,7 @@ pub fn schema() -> UpdateHandler<Box<dyn Error + Send + Sync + 'static>> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
+    pretty_env_logger::init();
     log::info!("Starting bot...");
 
     let db = Db::new();
@@ -183,7 +182,7 @@ async fn list_active_orders(
 ) -> HandlerResult {
     log::info!("-> list_active_orders");
     let orders = db.orders_by_status(order::Status::Published).await?;
-    if orders.len() == 0 {
+    if orders.is_empty() {
         bot.send_message(dialogue.chat_id(), "No orders")
             .await?;
     } else {
@@ -205,7 +204,7 @@ async fn list_my_assignments(
 ) -> HandlerResult {
     log::info!("-> list_my_assignments");
     let orders = db.active_assignments_to(uid).await?;
-    if orders.len() == 0 {
+    if orders.is_empty() {
         bot.send_message(dialogue.chat_id(), "No assigned orders")
             .await?;
     } else {
@@ -228,7 +227,7 @@ async fn show_my_orders(
 ) -> HandlerResult {
     log::info!("-> show_my_orders");
     let orders = db.orders_submitted_by_user(uid).await?;
-    if orders.len() == 0 {
+    if orders.is_empty() {
         bot.send_message(dialogue.chat_id(), "You have no current orders")
             .await?;
     } else {
@@ -255,7 +254,7 @@ async fn handle_main_menu(
 
     let uid = q.from.id;
     if let Some(item) = &q.data {
-        let menu_item = MainMenuItem::from_id(&item);
+        let menu_item = MainMenuItem::from_id(item);
         log::info!("main_menu = {menu_item:?}");
 
         if menu_item.is_some() {

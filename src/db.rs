@@ -40,14 +40,6 @@ impl Db {
         }).await.map_err(|e| format!("{e:?}").into()).flatten()
     }
 
-    pub async fn list_all_orders(&self) -> Result<Vec<Order>, Error> {
-        let db = self.db.clone();
-        spawn_blocking(move || {
-            let db = db.read().map_err(|e| format!("Rlock: {e:?}"))?;
-            db.list_all_orders()
-        }).await.map_err(|e| format!("{e:?}").into()).flatten()
-    }
-
     pub async fn active_assignments_to(
         &self,
         uid: UserId
@@ -129,11 +121,6 @@ impl InnerDb {
             .collect())
     }
 
-    pub fn list_all_orders(&self) -> Result<Vec<Order>, Error> {
-        log::info!("Listing orders: {:?}", self.orders);
-        Ok(self.orders.clone())
-    }
-
     pub fn orders_submitted_by_user(
         &self,
         uid: UserId
@@ -181,7 +168,7 @@ impl InnerDb {
                 return Ok(status);
             }
         }
-        return Err(format!("Could not find order {:?}", order_id).into())
+        Err(format!("Could not find order {:?}", order_id).into())
     }
 
     /// performs the action, returns modified order if successful
@@ -205,7 +192,6 @@ impl InnerDb {
                 .ok_or_else(|| format!("Could not find order {:?}",
                                        action.order_id))?;
             let prev_status = order.perform_action(action)?;
-            let new_status = order.status();
             Ok((prev_status, Some(order.clone())))
         }
     }

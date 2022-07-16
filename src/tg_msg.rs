@@ -16,7 +16,7 @@ impl TgMsg {
         let text: String =
             match msg.text() {
                 Some(text) => text.to_string(),
-                None => return Err(format!("Message has no text").into()),
+                None => return Err("Message has no text".into()),
             };
 
         Ok(TgMsg {
