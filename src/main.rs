@@ -96,7 +96,7 @@ pub fn schema() -> UpdateHandler<Box<dyn Error + Send + Sync + 'static>> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    pretty_env_logger::init();
+    env_logger::init();
     log::info!("Starting bot...");
 
     let db = Db::new();

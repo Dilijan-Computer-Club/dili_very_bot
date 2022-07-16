@@ -7,8 +7,8 @@ edition = "2021"
 
 [dependencies]
 log = "0.4.17"
-pretty_env_logger = "0.4.0"
-teloxide = { version = "0.9.2", features = ["full"] }
-tokio =    { version = "1.19.2", features = ["full"] }
-reqwest =  { version = "*", features = ["rustls-tls-native-roots"]}
-chrono = "0.4.19"
+# pretty_env_logger = { version = "0.4.0", features = [], default-features=false }
+env_logger =    { version = "*", features = [], default-features = false}
+teloxide =  { version = "0.9.2", features = ["macros"] }
+tokio =    { version = "1.19.2", features = ["macros", "rt-multi-thread"] }
+chrono =   { version = "0.4.19", features = ["clock"], default-features = false }
