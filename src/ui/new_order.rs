@@ -4,7 +4,7 @@ use teloxide::{
 };
 
 use crate::db::Db;
-use crate::Order;
+use crate::order::Order;
 
 use crate::error::Error;
 
