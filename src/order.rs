@@ -5,8 +5,16 @@ use teloxide::{
 };
 use crate::tg_msg::TgMsg;
 use crate::error::Error;
-use crate::order_action::OrderAction;
 use crate::urgency::Urgency;
+
+mod action_kind;
+mod action;
+mod status;
+mod role;
+pub use status::Status;
+pub use role::Role;
+pub use action::Action;
+pub use action_kind::ActionKind;
 
 type Offset = chrono::offset::Utc;
 type DateTime = chrono::DateTime<Offset>;
@@ -20,57 +28,6 @@ impl fmt::Display for OrderId {
         write!(f, "{}", self.0)
     }
 }
-
-#[derive(Clone, Copy, Debug)]
-pub enum Role {
-    Owner,
-    Assignee,
-    UnrelatedUser,
-}
-
-impl Role {
-    const fn allowed_actions(self) -> &'static [OrderAction] {
-        match self {
-            Role::Owner =>
-                &[OrderAction::Publish,
-                  OrderAction::Cancel,
-                  OrderAction::ConfirmDelivery,
-                  OrderAction::Delete],
-            Role::Assignee =>
-                &[OrderAction::Unassign,
-                OrderAction::MarkAsDelivered],
-            Role::UnrelatedUser => &[OrderAction::AssignToMe],
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Status {
-    Unpublished,
-    Published,
-    Assigned,
-    MarkedAsDelivered,
-    DeliveryConfirmed,
-}
-
-impl Status {
-    pub const fn human_name(self) -> &'static str {
-        match self {
-            Status::Unpublished       => "Not published",
-            Status::Published         => "Published",
-            Status::Assigned          => "Assigned",
-            Status::MarkedAsDelivered => "Marked as delivered",
-            Status::DeliveryConfirmed => "Delivered",
-        }
-    }
-}
-
-impl fmt::Display for Status {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        write!(f, "{}", self.human_name())
-    }
-}
-
 
 fn dumb_intersection<T: Clone + PartialEq>(aa: &[T], bb: &[T]) -> Vec<T> {
     let mut res = Vec::with_capacity(aa.len().max(bb.len()));
@@ -186,26 +143,26 @@ impl Order {
     }
 
     /// Actions that are available to order in its current state
-    pub const fn available_actions(&self) -> &'static [OrderAction] {
+    pub const fn available_actions(&self) -> &'static [ActionKind] {
         match self.status() {
             Status::Unpublished =>
-                &[OrderAction::Publish, OrderAction::Delete],
+                &[ActionKind::Publish, ActionKind::Delete],
             Status::Published =>
-                &[OrderAction::AssignToMe, OrderAction::Cancel],
+                &[ActionKind::AssignToMe, ActionKind::Cancel],
             Status::Assigned =>
-                &[OrderAction::Unassign, OrderAction::MarkAsDelivered,
-                  OrderAction::ConfirmDelivery],
+                &[ActionKind::Unassign, ActionKind::MarkAsDelivered,
+                  ActionKind::ConfirmDelivery],
             Status::MarkedAsDelivered =>
-                &[OrderAction::ConfirmDelivery],
+                &[ActionKind::ConfirmDelivery],
             Status::DeliveryConfirmed =>
-                &[OrderAction::Delete],
+                &[ActionKind::Delete],
         }
     }
 
     pub fn user_actions(
         &self,
         actor: UserId,
-    ) -> Vec<OrderAction> {
+    ) -> Vec<ActionKind> {
         let role = self.role(actor);
         let available_actions = self.available_actions();
         let allowed_actions = role.allowed_actions();
@@ -213,7 +170,7 @@ impl Order {
         dumb_intersection(allowed_actions, available_actions)
     }
 
-    pub fn public_actions(&self) -> Vec<OrderAction> {
+    pub fn public_actions(&self) -> Vec<ActionKind> {
         let role = Role::UnrelatedUser;
         let available_actions = self.available_actions();
         let allowed_actions = role.allowed_actions();
@@ -222,16 +179,11 @@ impl Order {
     }
 
     /// Send a message that shows this order
-    /// Arguments
-    ///
-    /// public:
-    ///   If the message is for a public chat
     pub async fn send_message_for(
         &self,
         bot: &mut AutoSend<Bot>,
-        uid: UserId,
+        uid: Option<UserId>,
         chat_id: ChatId,
-        public: bool,
     ) -> Result<(), Error> {
         let bot = bot.parse_mode(teloxide::types::ParseMode::Html);
         let description = &self.desc_msg.text;
@@ -240,21 +192,16 @@ impl Order {
         let order_id = self.id
             .ok_or("Could not make action for order without id")?;
 
-        let actions =
-            if public {
-                self.public_actions()
-            } else { 
-                self.user_actions(uid)
-            };
+        let actions = match uid {
+            Some(uid) => self.user_actions(uid),
+            None      => self.public_actions(),
+        };
 
-        let specific_actions: Vec<SpecificAction> =
+        let actions: Vec<Action> =
             actions.into_iter()
-            .map(|action| SpecificAction {
-                actor: uid,
-                action,
-                order_id })
+            .map(|action| Action { kind: action, order_id })
             .collect();
-        let buttons = actions_keyboard_markup(&specific_actions);
+        let buttons = actions_keyboard_markup(&actions);
 
         let status = self.status();
         let text = format!("\
@@ -267,9 +214,9 @@ impl Order {
         Ok(())
     }
 
-    pub fn is_action_permitted(&self, action: &SpecificAction) -> bool {
-        let allowed = self.user_actions(action.actor);
-        allowed.into_iter().any(|a| a == action.action)
+    pub fn is_action_permitted(&self, uid: UserId, action: &Action) -> bool {
+        let allowed = self.user_actions(uid);
+        allowed.into_iter().any(|a| a == action.kind)
     }
 
     /// Performs `action` and returns previous status
@@ -278,35 +225,36 @@ impl Order {
     /// be handled by the database instead
     pub fn perform_action(
         &mut self,
-        action: &SpecificAction
+        uid: UserId,
+        action: &Action
     ) -> Result<Status, Error> {
-        if ! self.is_action_permitted(action) {
+        if ! self.is_action_permitted(uid, action) {
             return Err(format!("Action {} is not permitted",
-                               action.action.human_name()).into())
+                               action.kind.human_name()).into())
         }
 
         let prev_status = self.status();
 
-        match action.action {
-            OrderAction::Publish => {
+        match action.kind {
+            ActionKind::Publish => {
                 self.published_at = Some(Offset::now());
             },
-            OrderAction::Cancel => {
+            ActionKind::Cancel => {
                 self.canceled_at = Some(Offset::now());
             },
-            OrderAction::AssignToMe => {
-                self.assigned = Some((Offset::now(), action.actor, None));
+            ActionKind::AssignToMe => {
+                self.assigned = Some((Offset::now(), uid, None));
             },
-            OrderAction::Unassign => {
+            ActionKind::Unassign => {
                 self.assigned = None;
             },
-            OrderAction::MarkAsDelivered => {
-                self.delivered = Some((action.actor, None, Offset::now()));
+            ActionKind::MarkAsDelivered => {
+                self.delivered = Some((uid, None, Offset::now()));
             },
-            OrderAction::ConfirmDelivery => {
+            ActionKind::ConfirmDelivery => {
                 self.delivery_confirmed_at = Some(Offset::now())
             },
-            OrderAction::Delete => {
+            ActionKind::Delete => {
                 panic!("should be handled by the database")
             },
         }
@@ -315,51 +263,7 @@ impl Order {
     }
 }
 
-/// OrderAction for specific order
-#[derive(Clone, Debug)]
-pub struct SpecificAction {
-    pub actor: UserId,
-    pub order_id: OrderId,
-    pub action: OrderAction,
-}
-
-impl SpecificAction {
-    const BTN_DATA_PREFIX: &'static str = "oa";
-    fn human_name(&self) -> &'static str {
-        self.action.human_name()
-    }
-
-    /// Serializes it in a way that can be parsed by `try_parse`
-    fn kbd_button_data(&self) -> String {
-        format!("{} {} {}",
-                Self::BTN_DATA_PREFIX,
-                self.action.id(),
-                self.order_id.0)
-    }
-
-    /// If `data` can be parsed as SpecificAtion it returns it, otherwise None
-    ///
-    /// `actor` is passed in separately because passing it as data is
-    /// probably not safe, and it can be found in the callback
-    pub fn try_parse(data: &str, actor: UserId) -> Option<SpecificAction> {
-        let mut args = data.split(' ');
-
-        let magic = args.next()?;
-        if magic != Self::BTN_DATA_PREFIX { return None }
-
-        let action = args.next()?;
-        let order_id = args.next()?;
-        let order_id = OrderId(order_id.parse().ok()?);
-
-        // Too many arguments
-        if args.next().is_some() { return None }
-
-        let action = OrderAction::maybe_from_id(action)?;
-        Some(SpecificAction { actor, action, order_id })
-    }
-}
-
-fn actions_keyboard_markup(actions: &[SpecificAction]) -> InlineKeyboardMarkup {
+fn actions_keyboard_markup(actions: &[Action]) -> InlineKeyboardMarkup {
     let btns: Vec<InlineKeyboardButton> = actions
         .iter()
         .map(|a| InlineKeyboardButton::callback(a.human_name(),
@@ -428,11 +332,9 @@ mod tests {
             delivery_confirmed_at: None,
         };
 
-        let act = |order: &mut Order, action: OrderAction, actor: UserId, expected_status: Status| {
-            order.perform_action(&SpecificAction {
-                action: action,
-                actor: actor,
-                order_id: oid,
+        let act = |order: &mut Order, action: ActionKind, actor: UserId, expected_status: Status| {
+            order.perform_action(actor, &Action {
+                kind: action, order_id: oid,
             }).unwrap();
             assert_eq!(expected_status, order.status());
         };
@@ -441,19 +343,19 @@ mod tests {
         {
             let mut order = order.clone();
 
-            act(&mut order, OrderAction::Publish,         publisher, Status::Published);
-            act(&mut order, OrderAction::AssignToMe,      assignee,  Status::Assigned);
-            act(&mut order, OrderAction::MarkAsDelivered, assignee,  Status::MarkedAsDelivered);
-            act(&mut order, OrderAction::ConfirmDelivery, publisher, Status::DeliveryConfirmed);
+            act(&mut order, ActionKind::Publish,         publisher, Status::Published);
+            act(&mut order, ActionKind::AssignToMe,      assignee,  Status::Assigned);
+            act(&mut order, ActionKind::MarkAsDelivered, assignee,  Status::MarkedAsDelivered);
+            act(&mut order, ActionKind::ConfirmDelivery, publisher, Status::DeliveryConfirmed);
         }
 
         // happy path, but confirmed without marking as delivered
         {
             let mut order = order.clone();
 
-            act(&mut order, OrderAction::Publish,         publisher, Status::Published);
-            act(&mut order, OrderAction::AssignToMe,      assignee,  Status::Assigned);
-            act(&mut order, OrderAction::ConfirmDelivery, publisher, Status::DeliveryConfirmed);
+            act(&mut order, ActionKind::Publish,         publisher, Status::Published);
+            act(&mut order, ActionKind::AssignToMe,      assignee,  Status::Assigned);
+            act(&mut order, ActionKind::ConfirmDelivery, publisher, Status::DeliveryConfirmed);
         }
     }
 }

@@ -6,8 +6,7 @@ use std::sync::{Arc, RwLock};
 use std::collections::BTreeMap;
 use crate::error::Error;
 
-use crate::order::{self, Order, OrderId, SpecificAction, Status};
-use crate::order_action::OrderAction;
+use crate::order::{self, Order, OrderId, Action, ActionKind, Status};
 
 
 /// Wrapper for InnerDb that is Send, Sync, and async
@@ -90,13 +89,14 @@ impl Db {
     /// If the order is deleted then the returned order is None
     pub async fn perform_action(
         &mut self,
+        uid: UserId,
         pcid: ChatId,
-        action: SpecificAction,
+        action: Action,
     ) -> Result<(order::Status, Option<Order>), Error> {
         let db = self.db.clone();
         spawn_blocking(move || {
             let mut db = db.write().map_err(|e| format!("lock: {e:?}"))?;
-            db.perform_action(pcid, &action)
+            db.perform_action(uid, pcid, &action)
         }).await.map_err(|e| format!("{e:?}").into()).flatten()
     }
 
@@ -340,17 +340,18 @@ impl InnerDb {
     /// performs the action, returns modified order if successful
     pub fn perform_action(
         &mut self,
+        uid: UserId,
         pub_chat_id: ChatId,
-        action: &SpecificAction,
+        action: &Action,
     ) -> Result<(order::Status, Option<Order>), Error> {
 
-        if action.action == OrderAction::Delete {
+        if action.kind == ActionKind::Delete {
             let order = self.find_order(pub_chat_id, action.order_id)
                 .ok_or_else(|| format!("Could not find order {:?}",
                                        action.order_id))?;
-            if ! order.is_action_permitted(action) {
+            if ! order.is_action_permitted(uid, action) {
                 return Err(format!("Action {} is not permitted",
-                                   action.action.human_name()).into())
+                                   action.kind.human_name()).into())
             }
 
             let status = self.delete_order(pub_chat_id, action.order_id)?;
@@ -359,7 +360,7 @@ impl InnerDb {
             let order = self.find_order_mut(pub_chat_id, action.order_id)
                 .ok_or_else(|| format!("Could not find order {:?}",
                                        action.order_id))?;
-            let prev_status = order.perform_action(action)?;
+            let prev_status = order.perform_action(uid, action)?;
             Ok((prev_status, Some(order.clone())))
         }
     }

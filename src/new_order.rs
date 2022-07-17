@@ -1,19 +1,8 @@
 use teloxide::{
     prelude::*,
-    payloads::SendMessageSetters,
-    types::{
-        Chat, ChatKind,
-        InlineKeyboardButton, InlineKeyboardMarkup,
-        InlineQueryResultArticle, InputMessageContent,
-    },
-    dispatching::{
-        dialogue::{self, InMemStorage, Storage},
-        UpdateHandler
-    },
-    utils::command::BotCommands,
+    dispatching::UpdateHandler,
 };
 
-use crate::urgency::Urgency;
 use crate::db::Db;
 use crate::Order;
 
@@ -64,12 +53,15 @@ async fn receive_description(
         let order_id = db.add_order(pcid, &order).await?;
         order.id = Some(order_id);
 
+        let uid = match msg.chat.is_private() {
+            true  => Some(order.from.id),
+            false => None,
+        };
+
         order.send_message_for(
             &mut bot,
-            order.from.id,
-            msg.chat.id,
-            matches!(msg.chat.kind, ChatKind::Public(_))
-        ).await?;
+            uid,
+            msg.chat.id).await?;
         dialogue.update(crate::State::Start).await?;
     } else {
         bot.send_message(dialogue.chat_id(), "No description").await?;

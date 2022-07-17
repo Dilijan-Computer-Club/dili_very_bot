@@ -7,7 +7,7 @@ use teloxide::{
     payloads::SendMessageSetters,
     types::{
         InlineKeyboardButton, InlineKeyboardMarkup,
-        Chat, ChatKind, UpdateKind
+        Chat, UpdateKind
     },
     dispatching::{
         dialogue::{self, InMemStorage},
@@ -19,7 +19,6 @@ use teloxide::{
 mod error;
 mod new_order;
 mod order;
-mod order_action;
 mod tg_msg;
 mod db;
 mod urgency;
@@ -40,7 +39,7 @@ enum Command {
     #[command(description = "Show help")]
     Help,
     #[command(description = "List active orders")]
-    ListactiveOrders,
+    ListActiveOrders,
     #[command(description = "Show my orders")]
     ListMyOrders,
     #[command(description = "Make New Order")]
@@ -74,7 +73,7 @@ pub fn schema() -> UpdateHandler<Box<dyn Error + Send + Sync + 'static>> {
     let command_handler = teloxide::filter_command::<Command, _>()
         .branch(dptree::case![Command::Menu].endpoint(main_menu))
         .branch(dptree::case![Command::Start].endpoint(main_menu))
-        .branch(dptree::case![Command::ListactiveOrders])
+        .branch(dptree::case![Command::ListActiveOrders])
             .endpoint(list_active_orders);
 
     let message_handler = Update::filter_message()
@@ -170,7 +169,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 #[derive(Clone, Copy, Debug)]
 enum MainMenuItem {
-    ListactiveOrders,
+    ListActiveOrders,
     ShowMyOrders,
     MyAssignments,
     NewOrder,
@@ -179,7 +178,7 @@ enum MainMenuItem {
 impl MainMenuItem {
     pub const fn human_name(&self) -> &'static str {
         match self {
-            MainMenuItem::ListactiveOrders => "List active orders",
+            MainMenuItem::ListActiveOrders => "List active orders",
             MainMenuItem::ShowMyOrders     => "My Orders",
             MainMenuItem::MyAssignments    => "Orders I'm delivering",
             MainMenuItem::NewOrder         => "New Order",
@@ -188,23 +187,27 @@ impl MainMenuItem {
 
     pub const fn id(&self) -> &'static str {
         match self {
-            MainMenuItem::ListactiveOrders => "list_active_orders",
+            MainMenuItem::ListActiveOrders => "list_active_orders",
             MainMenuItem::ShowMyOrders     => "show_my_orders",
             MainMenuItem::MyAssignments    => "my_assignments",
             MainMenuItem::NewOrder         => "new_order",
         }
     }
 
-    pub const fn all_items() -> [Self; 4] {
-        [ MainMenuItem::ListactiveOrders,
-          MainMenuItem::ShowMyOrders,
-          MainMenuItem::MyAssignments,
-          MainMenuItem::NewOrder ]
+    pub const fn private_items() -> &'static [Self] {
+        &[ MainMenuItem::ListActiveOrders,
+           MainMenuItem::ShowMyOrders,
+           MainMenuItem::MyAssignments,
+           MainMenuItem::NewOrder ]
+    }
+
+    pub const fn public_items() -> &'static [Self] {
+        &[ MainMenuItem::ListActiveOrders ]
     }
 
     pub fn from_id(s: &str) -> Option<MainMenuItem> {
         match s {
-          "list_active_orders" => Some(MainMenuItem::ListactiveOrders),
+          "list_active_orders" => Some(MainMenuItem::ListActiveOrders),
           "show_my_orders"     => Some(MainMenuItem::ShowMyOrders),
           "my_assignments"     => Some(MainMenuItem::MyAssignments),
           "new_order"          => Some(MainMenuItem::NewOrder),
@@ -220,11 +223,18 @@ async fn main_menu(
     mut db: Db,
 ) -> HandlerResult {
     db.collect_data_from_msg(msg.clone()).await?;
-    log::info!("-> main_menu");
 
-    let main_menu_items = MainMenuItem::all_items()
-        .map(|item| [InlineKeyboardButton::callback(item.human_name(),
-                         item.id())]);
+    let main_menu_items = if msg.chat.is_private() {
+        log::info!("-> main_menu private");
+        MainMenuItem::private_items()
+    } else {
+        log::info!("-> main_menu public");
+        MainMenuItem::public_items()
+    };
+    let main_menu_items = main_menu_items
+        .into_iter()
+        .map(|item| [InlineKeyboardButton::callback(
+                        item.human_name(), item.id())]);
 
     bot.send_message(msg.chat.id, "Choose your destiny")
         .reply_markup(InlineKeyboardMarkup::new(main_menu_items)).
@@ -248,13 +258,12 @@ async fn list_active_orders(
             .await?;
     } else {
         bot.send_message(dialogue.chat_id(), "All active orders:").await?;
+        let uid = match chat.is_private() {
+            true => Some(uid),
+            false => None,
+        };
         for order in orders.iter() {
-            order.send_message_for(
-                &mut bot,
-                uid,
-                chat.id,
-                matches!(chat.kind, ChatKind::Public(_))
-            ).await?;
+            order.send_message_for(&mut bot, uid, chat.id).await?;
         }
     }
     Ok(())
@@ -275,13 +284,12 @@ async fn list_my_assignments(
             .await?;
     } else {
         bot.send_message(dialogue.chat_id(), "Orders assigned to you:").await?;
+        let uid = match chat.is_private() {
+            true => Some(uid),
+            false => None,
+        };
         for order in orders.iter() {
-            order.send_message_for(
-                &mut bot,
-                uid,
-                chat.id,
-                matches!(chat.kind, ChatKind::Public(_))
-            ).await?;
+            order.send_message_for(&mut bot, uid, chat.id).await?;
         }
     }
     Ok(())
@@ -303,13 +311,12 @@ async fn show_my_orders(
             .await?;
     } else {
         bot.send_message(dialogue.chat_id(), "Your orders:").await?;
+        let uid = match chat.is_private() {
+            true => Some(uid),
+            false => None,
+        };
         for order in orders.iter() {
-            order.send_message_for(
-                &mut bot,
-                uid,
-                chat.id,
-                matches!(chat.kind, ChatKind::Public(_))
-            ).await?;
+            order.send_message_for(&mut bot, uid, chat.id).await?;
         }
     }
     dialogue.update(State::Start).await?;
@@ -371,7 +378,7 @@ trying to handle ShowMyOrders q = {q:?}");
                 let pcid = pcid.unwrap();
                 show_my_orders(bot, db, pcid, chat, q.from.id, dialogue).await?;
             },
-            Some(MainMenuItem::ListactiveOrders) => {
+            Some(MainMenuItem::ListActiveOrders) => {
                 let pcid = db.pub_chat_id_from_msg(msg.clone()).await?;
                 if pcid.is_none() {
                     log::warn!("Could not get pcid from msg {:?}", &msg);
@@ -426,10 +433,12 @@ query: {q:?}", q.data);
     }
     let msg = q.message.unwrap();
 
-    if let Some(action) = order::SpecificAction::try_parse(&data, q.from.id) {
+    let uid: UserId = q.from.id;
+    if let Some(action) = order::Action::try_parse(&data) {
         let pcid = db.pub_chat_id_from_msg(msg.clone()).await?;
         if let Some(pcid) = pcid {
-            return handle_order_action(bot, pcid, action, db, dialogue).await;
+            return handle_order_action(
+                bot, uid, pcid, action, db, dialogue).await;
         }
     }
 
@@ -437,14 +446,15 @@ query: {q:?}", q.data);
 }
 
 async fn handle_order_action(
-    bot: AutoSend<Bot>,
+    mut bot: AutoSend<Bot>,
+    uid: UserId,
     pcid: ChatId,
-    action: order::SpecificAction,
+    action: order::Action,
     mut db: Db,
     dialogue: MyDialogue,
 ) -> HandlerResult {
-    let action_type = action.action.clone();
-    let (prev_status, order) = db.perform_action(pcid, action).await?;
+    let action_type = action.kind;
+    let (prev_status, order) = db.perform_action(uid, pcid, action).await?;
 
     // TODO
     if let Some(new_order) = order {
@@ -452,14 +462,35 @@ async fn handle_order_action(
         // status updated
 
         // reporting updates:
-        //   Any -> active       -- msg to owner
-        //   Any -> AssignedToMe    -- msg to both parties
+        //   Any -> active          -- msg to owner
+        //   Any -> Assigned        -- msg to both parties
         //   Any -> MarkAsDelivered -- msg to both parties
         //   Any -> Unassign        -- msg to both parties (if assigned)
         //   Any -> ConfirmDelivery -- msg to both parties
         //   Any -> Delete          -- unreachable
-        bot.send_message(dialogue.chat_id(),
-            format!("Changed status to {new_status}")).await?;
+        match new_status {
+            order::Status::Unpublished => {
+                bot.send_message(
+                    dialogue.chat_id(), "The order is unpublished")
+                    .await?;
+            },
+            order::Status::Published => {
+                if pcid != dialogue.chat_id() {
+                    // it's a different chat, so reply here as well as send
+                    // a notification to the main public chat
+                    bot.send_message(
+                        dialogue.chat_id(), "The order is published").await?;
+                }
+                // Send notification to public chat
+                new_order.send_message_for(&mut bot, None, pcid).await?;
+            },
+            order::Status::Assigned => {},
+            order::Status::MarkedAsDelivered => {},
+            order::Status::DeliveryConfirmed => {},
+        }
+
+        // bot.send_message(dialogue.chat_id(),
+        //     format!("Changed status to {new_status}")).await?;
         log::info!("{prev_status} + {action_type:?} -> {new_status}    {new_order:?}");
     } else {
         bot.send_message(dialogue.chat_id(), "Deleted the order").await?;
