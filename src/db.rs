@@ -23,10 +23,9 @@ pub enum PubChatFromMsgError {
 
 impl fmt::Display for PubChatFromMsgError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // write!(f, "({}, {})", self.x, self.y)
         match self {
             PubChatFromMsgError::NotInPubChats => {
-                write!(f, "You are not in any public chat with this bot.
+                write!(f, "!You! are not in any public chat with this bot.
 Try writting '/hello' into the public chat you're in to make sure \
 the bot knows you're there")
             },
@@ -490,19 +489,33 @@ impl InnerDb {
         }
 
         let user = &q.from;
-        log::info!("-> pub_chat_id_from_msg pub_chats = {:?}", self.public_chats);
+        log::info!("-> pub_chat_id_from_cq pub_chats = {:?}", self.public_chats);
 
+        let pc = self.find_user_pub_chat(user.id)?;
+        log::info!("-> pub_chat_id_from_cq => {pc:?}");
+        Ok(pc.chat.id)
+    }
+
+    /// Find public chat to which the user belongs
+    /// Returns error if there is more than 1 chat
+    fn find_user_pub_chat(
+        &self,
+        uid: UserId
+    ) -> Result<&PublicChat, PubChatFromMsgError> {
+        log::debug!("-> find_user_pub_chat");
         let mut pub_chats = self.public_chats.iter()
-            .filter(|pc| pc.members.iter().any(|u| *u == user.id));
+            .filter(|pc| pc.members.iter().any(|u| *u == uid));
         let pc = pub_chats.next();
         if pc.is_none() {
-            log::info!("-> pub_chat_id_from_msg User {} is not in any pub chat", user.id);
+            log::warn!("-> pub_chat_id_from_cq User {uid} is not in any pub chat");
             return Err(PubChatFromMsgError::NotInPubChats)
         }
         if pub_chats.next().is_some() {
+            log::info!("-> find_user_pub_chat => MultipleChats");
             return Err(PubChatFromMsgError::MultipleChats)
         }
-        Ok(pc.unwrap().chat.id)
+        log::debug!("-> find_user_pub_chat {pc:?}");
+        Ok(pc.unwrap())
     }
 
     /// Try to figure out which public chat the message belongs to
@@ -524,17 +537,8 @@ impl InnerDb {
         let user = user.unwrap();
         log::info!("-> pub_chat_id_from_msg pub_chats = {:?}", self.public_chats);
 
-        let mut pub_chats = self.public_chats.iter()
-            .filter(|pc| pc.members.iter().any(|u| *u == user.id));
-        let pc = pub_chats.next();
-        if pc.is_none() {
-            log::info!("-> pub_chat_id_from_msg User {} is not in any pub chat", user.id);
-            return Err(PubChatFromMsgError::NotInPubChats)
-        }
-        if pub_chats.next().is_some() {
-            return Err(PubChatFromMsgError::MultipleChats)
-        }
-        Ok(pc.unwrap().chat.id)
+        let pc = self.find_user_pub_chat(user.id)?;
+        Ok(pc.chat.id)
     }
 
     pub fn collect_data_from_cq(
@@ -546,8 +550,25 @@ impl InnerDb {
         self.update_user(cq.from.clone());
         if let Some(msg) = &cq.message {
             self.collect_data_from_msg(msg)?;
+            if ! msg.chat.id.is_user() {
+                self.update_chat_membership(msg.chat.id, cq.from.id);
+            }
         }
         Ok(())
+    }
+
+    fn update_chat_membership(
+        &mut self,
+        cid: ChatId,
+        uid: UserId,
+    ) {
+        let chat = self.public_chats.iter_mut().find(|c| c.chat.id == cid);
+        if chat.is_none() {
+            log::warn!("update_chat_membership Weird that we couldn't find pub chat {cid}");
+            return;
+        }
+        let chat = chat.unwrap();
+        chat.add_user(uid);
     }
 
     pub fn collect_data_from_msg(

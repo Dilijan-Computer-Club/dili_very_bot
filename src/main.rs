@@ -118,6 +118,7 @@ query: {q:?}", q.data);
                         return Ok(())
                     }
                     let msg = q.message.unwrap();
+                    log::info!("deleting old order message {}", msg.id);
                     bot.delete_message(msg.chat.id, msg.id).await?;
                 }
             },
@@ -145,7 +146,9 @@ async fn handle_order_action(
 ) -> Result<bool, Error> {
     let action_type = action.kind;
     let res = db.perform_action(uid, pcid, action).await;
+    log::info!("db.perform_action => {res:?}");
     if let Err(e) = res {
+        log::warn!("handle_order_action perform_action({uid}, {pcid}) => {e:?}");
         // handle error here
         bot.send_message(dialogue.chat_id(), format!("{e}")).await?;
         return Ok(false)
@@ -160,13 +163,6 @@ async fn handle_order_action(
             changed = true
         }
 
-        // reporting updates:
-        //   Any -> active          -- msg to owner
-        //   Any -> Assigned        -- msg to both parties
-        //   Any -> MarkAsDelivered -- msg to both parties
-        //   Any -> Unassign        -- msg to both parties (if assigned)
-        //   Any -> ConfirmDelivery -- msg to both parties
-        //   Any -> Delete          -- unreachable
         match new_status {
             order::Status::Unpublished => {
                 bot.send_message(
@@ -177,8 +173,19 @@ async fn handle_order_action(
                 if pcid != dialogue.chat_id() {
                     // it's a different chat, so reply here as well as send
                     // a notification to the main public chat
+
+                    let cid: ChatId = dialogue.chat_id();
+                    // If the chat id value is the same as the owner of the order
+                    // it means we're in private chat with this user and should
+                    // show actions according to their permissions
+                    let uid = if cid.0 == new_order.from.id.0 as i64 {
+                        Some(new_order.from.id)
+                    } else {
+                        None
+                    };
+
                     ui::order::send_message(
-                        &new_order, &mut bot, None, dialogue.chat_id(),
+                        &new_order, &mut bot, uid, cid,
                         Some("New order is published")).await?;
                 }
                 // Send notification to public chat
@@ -186,6 +193,7 @@ async fn handle_order_action(
                                         Some("New order is published")).await?;
             },
             order::Status::Assigned => {
+                // TODO send message to owner
                 let assignee_uid = new_order.assigned.as_ref().unwrap().1;
                 let assignee: Option<User> = db.get_user(assignee_uid).await?;
                 if let Some(assignee) = assignee {
@@ -210,15 +218,43 @@ async fn handle_order_action(
                 }
             },
             order::Status::MarkedAsDelivered => {
-                // TODO notifications
+                // TODO
+                bot.send_message(dialogue.chat_id(),
+                format!("Order is marked as delivered. \
+It will be closed after the publisher confirms they've received it.")).await?;
+
+                // Send message to the owner asking to confirm delivery
             },
             order::Status::DeliveryConfirmed => {
-                // TODO notifications
+                // Send message to the assignee
+                let assignee_id = new_order.assigned.as_ref().unwrap().1;
+                let assignee_cid = utils::uid_to_cid(assignee_id);
+                if let Some(assignee_cid) = assignee_cid {
+                    ui::order::send_message(
+                        &new_order,
+                        &mut bot,
+                        Some(assignee_id),
+                        assignee_cid,
+                        Some("Order delivery is confirmed! Thank you!")).await?;
+                } else {
+                    log::warn!("Assignee {assignee_id} is not user???");
+                }
+                // Send message to the owner
+                let owner_id = new_order.from.id;
+                let owner_cid = utils::uid_to_cid(owner_id);
+                if let Some(owner_cid) = owner_cid {
+                    ui::order::send_message(
+                        &new_order,
+                        &mut bot,
+                        Some(owner_id),
+                        owner_cid,
+                        Some("Order delivery is confirmed!")).await?;
+                }
             },
         }
 
-        // bot.send_message(dialogue.chat_id(),
-        //     format!("Changed status to {new_status}")).await?;
+        bot.send_message(dialogue.chat_id(),
+            format!("Changed status to {new_status}")).await?;
         log::info!("{prev_status} + {action_type:?} -> {new_status}    {new_order:?}");
     } else {
         bot.send_message(dialogue.chat_id(), "Deleted the order").await?;

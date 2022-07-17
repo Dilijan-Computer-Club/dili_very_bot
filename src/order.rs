@@ -154,7 +154,7 @@ impl Order {
 
     pub fn public_actions(&self) -> Vec<ActionKind> {
         let available_actions = self.available_actions();
-        let allowed_actions = &[ActionKind::AssignToMe];
+        let allowed_actions = Role::UnrelatedUser.allowed_actions();
 
         dumb_intersection(allowed_actions, available_actions)
     }
