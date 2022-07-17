@@ -3,14 +3,8 @@
 
 use teloxide::{
     prelude::*,
-    types::{
-        Chat, User,
-    },
-    dispatching::{
-        dialogue,
-        UpdateHandler
-    },
-    utils::command::BotCommands,
+    types::{ Chat, User, },
+    dispatching::{ dialogue, UpdateHandler },
 };
 
 mod error;
@@ -26,28 +20,6 @@ use db::Db;
 use crate::error::Error;
 use crate::ui::{State, MyDialogue, MyStorage, HandlerResult};
 
-
-#[derive(BotCommands, Clone)]
-#[command(rename = "snake_case",
-          description = "These commands are supported:")]
-enum Command {
-    #[command(description = "Start here")]
-    Start,
-    #[command(description = "Show main menu")]
-    Menu,
-    #[command(description = "Show help")]
-    Help,
-    #[command(description = "Debugging")]
-    Debug,
-    #[command(description = "List active orders")]
-    ListActiveOrders,
-    #[command(description = "Show my orders")]
-    ListMyOrders,
-    #[command(description = "Make New Order")]
-    MakeNewOrder,
-}
-
-
 fn init_bot() -> Result<Bot, Error> {
     use std::io::Read;
     let mut file = std::fs::File::open("key")?;
@@ -60,78 +32,9 @@ fn init_bot() -> Result<Bot, Error> {
 /// it's a filter because I don't know another way to handle all events
 /// and passing them to other handlers
 async fn collect_data_handler(db: Db, update: Update) -> bool {
+    log::info!("Collecting data...");
     let _ = ui::collect_data(db, update).await;
     false
-}
-
-async fn handle_command(
-    bot: AutoSend<Bot>,
-    msg: Message,
-    command: Command,
-    db: Db,
-) -> HandlerResult {
-    match command {
-        Command::Start => { ui::main_menu::main_menu(bot, msg, db).await? },
-        Command::Menu  => { ui::main_menu::main_menu(bot, msg, db).await? },
-        Command::Help => {},
-        Command::Debug => { debug_msg(bot, msg, db).await? },
-        Command::ListActiveOrders => {},
-        Command::ListMyOrders => {},
-        Command::MakeNewOrder => {},
-    }
-    Ok(())
-}
-
-pub fn schema() -> UpdateHandler<Error> {
-    let command_handler = teloxide::filter_command::<Command, _>()
-        .endpoint(handle_command);
-    let message_handler = Update::filter_message()
-        .chain(dptree::entry())
-        .branch(command_handler);
-
-    let callback_query_handler =
-        Update::filter_callback_query()
-            .endpoint(handle_callback_query);
-
-    dialogue::enter::<Update, MyStorage, State, _>()
-        .branch(dptree::filter_async(collect_data_handler))
-        .branch(message_handler)
-        .branch(callback_query_handler)
-        .branch(dptree::case![State::NewOrder(no)]
-                .branch(ui::new_order::schema()))
-        .branch(dptree::entry())
-}
-
-
-#[tokio::main]
-async fn main() -> Result<(), Error> {
-    pretty_env_logger::init();
-    log::info!("Starting bot...");
-
-    let db = Db::new();
-
-    let bot = init_bot()?.auto_send();
-
-    Dispatcher::builder(bot, schema())
-        .dependencies(dptree::deps![MyStorage::new(), db])
-        .build() // .setup_ctrlc_handler()
-        .dispatch()
-        .await;
-
-    Ok(())
-}
-
-/// Show some debugging info
-///
-/// TODO limit the displayed information to what's allowed
-async fn debug_msg(
-    bot: AutoSend<Bot>,
-    msg: Message,
-    db: Db,
-) -> HandlerResult {
-    let s = db.debug_stats().await?;
-    bot.send_message(msg.chat.id, s).await?;
-    Ok(())
 }
 
 async fn handle_callback_query(
@@ -141,6 +44,7 @@ async fn handle_callback_query(
     dialogue: MyDialogue
 ) -> HandlerResult {
     log::info!("-> handle_callback_query");
+    db.collect_data_from_cq(q.clone()).await?;
     log::debug!("   query: {q:?}");
     if q.message.is_none() {
         log::warn!("query has no message");
@@ -198,23 +102,22 @@ query: {q:?}", q.data);
         log::info!(" -> handle_callback_query: no data, skipping message");
         return Ok(())
     }
-    let data = q.data.unwrap();
-
-    if q.message.is_none() {
-        log::warn!("Message is missing in callback query");
-        return Ok(())
-    }
-    let msg = q.message.unwrap();
+    let data = q.data.clone().unwrap();
 
     let uid: UserId = q.from.id;
     if let Some(action) = order::Action::try_parse(&data) {
         log::info!("  got action from callback query {action:?}");
-        let pcid = db.pub_chat_id_from_msg(msg.clone()).await;
+        let pcid = db.pub_chat_id_from_cq(q.clone()).await;
         match pcid {
             Ok(pcid) => {
                 let changed = handle_order_action(
                     bot.clone(), uid, pcid, action, db, dialogue).await?;
                 if changed {
+                    if q.message.is_none() {
+                        log::warn!("Message is missing in callback query");
+                        return Ok(())
+                    }
+                    let msg = q.message.unwrap();
                     bot.delete_message(msg.chat.id, msg.id).await?;
                 }
             },
@@ -256,7 +159,6 @@ async fn handle_order_action(
         if prev_status != new_status {
             changed = true
         }
-        // status updated
 
         // reporting updates:
         //   Any -> active          -- msg to owner
@@ -286,14 +188,14 @@ async fn handle_order_action(
                 let assignee: Option<User> = db.get_user(assignee_uid).await?;
                 if let Some(assignee) = assignee {
                     // Send a private message to the order owner
-                    if let Some(priv_chat_id) = db.get_priv_chat_id(uid).await? {
-                        let assignee_link = markup::user_link(&assignee);
-                        let msg =
-                            format!("Order is assigned to {assignee_link}");
-                        bot.send_message(priv_chat_id, msg).await?;
-                        new_order.send_message_for(
-                            &mut bot, Some(uid), priv_chat_id).await?;
-                    }
+                    let assignee_link = markup::user_link(&assignee);
+                    let msg =
+                        format!("Order is assigned to {assignee_link}");
+
+                    let priv_chat_id: ChatId = uid.into();
+                    bot.send_message(priv_chat_id, msg).await?;
+                    new_order.send_message_for(
+                        &mut bot, Some(uid), priv_chat_id).await?;
 
                     // Send a public message sayng the order is taken
                     let msg = format!("Order is taken by {}",
@@ -325,3 +227,42 @@ async fn handle_order_action(
 
     Ok(changed)
 }
+
+pub fn schema() -> UpdateHandler<Error> {
+    let command_handler = teloxide::filter_command::<ui::commands::Command, _>()
+        .endpoint(ui::commands::handle_command);
+    let message_handler = Update::filter_message()
+        .chain(dptree::entry())
+        .branch(command_handler);
+
+    let callback_query_handler =
+        Update::filter_callback_query()
+            .endpoint(handle_callback_query);
+
+    dialogue::enter::<Update, MyStorage, State, _>()
+        .branch(dptree::filter_async(collect_data_handler))
+        .branch(message_handler)
+        .branch(callback_query_handler)
+        .branch(dptree::case![State::NewOrder(no)]
+                .branch(ui::new_order::schema()))
+        .branch(dptree::entry())
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Error> {
+    pretty_env_logger::init();
+    log::info!("Starting bot...");
+
+    let db = Db::new();
+
+    let bot = init_bot()?.auto_send();
+
+    Dispatcher::builder(bot, schema())
+        .dependencies(dptree::deps![MyStorage::new(), db])
+        .build() // .setup_ctrlc_handler()
+        .dispatch()
+        .await;
+
+    Ok(())
+}
+

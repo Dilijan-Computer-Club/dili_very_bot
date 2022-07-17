@@ -17,6 +17,9 @@ pub use list_my_assignments::list_my_assignments;
 mod list_active_orders;
 pub use list_active_orders::list_active_orders;
 
+pub mod commands;
+
+
 use crate::error::Error;
 pub type HandlerResult = Result<(), Error>;
 pub type MyDialogue = Dialogue<State, InMemStorage<State>>;
@@ -29,11 +32,10 @@ pub enum State {
     NewOrder(new_order::State)
 }
 
-
 pub async fn pcid_or_err(bot: &AutoSend<Bot>, db: &crate::Db,
-    msg: &Message, dialogue: &MyDialogue
+    cq: &CallbackQuery, dialogue: &MyDialogue
 ) -> Result<ChatId, Error> {
-    let pcid = db.pub_chat_id_from_msg(msg.clone()).await;
+    let pcid = db.pub_chat_id_from_cq(cq.clone()).await;
     match pcid {
         Ok(pcid) => Ok(pcid),
         Err(e) => {
