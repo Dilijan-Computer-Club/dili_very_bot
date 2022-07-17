@@ -22,8 +22,9 @@ pub async fn list_active_orders(
             true =>  Some(uid),
             false => None,
         };
+        let msg: Option<&str> = None;
         for order in orders.iter() {
-            ui::order::send_message(&order, &mut bot, uid, chat.id).await?;
+            ui::order::send_message(&order, &mut bot, uid, chat.id, msg).await?;
         }
     }
     Ok(())

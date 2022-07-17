@@ -1,8 +1,5 @@
 use std::fmt;
-use teloxide::{
-    prelude::*,
-    types::{InlineKeyboardButton, InlineKeyboardMarkup, User}
-};
+use teloxide::{ prelude::*, types::User };
 use crate::tg_msg::TgMsg;
 use crate::error::Error;
 use crate::urgency::Urgency;
@@ -17,8 +14,7 @@ pub use role::Role;
 pub use action::Action;
 pub use action_kind::ActionKind;
 pub use action_error::ActionError;
-use crate::utils::{dumb_intersection};
-use crate::markup;
+use crate::utils::dumb_intersection;
 
 type Offset = chrono::offset::Utc;
 type DateTime = chrono::DateTime<Offset>;
@@ -237,7 +233,6 @@ mod tests {
     fn test_order_status_changes() {
         let publisher = UserId(1);
         let assignee = UserId(2);
-        let other = UserId(3);
         let oid = OrderId(1);
 
         let (msg, from) = mk_msg();

@@ -177,11 +177,13 @@ async fn handle_order_action(
                 if pcid != dialogue.chat_id() {
                     // it's a different chat, so reply here as well as send
                     // a notification to the main public chat
-                    bot.send_message(
-                        dialogue.chat_id(), "The order is published").await?;
+                    ui::order::send_message(
+                        &new_order, &mut bot, None, dialogue.chat_id(),
+                        Some("New order is published")).await?;
                 }
                 // Send notification to public chat
-                ui::order::send_message(&new_order, &mut bot, None, pcid).await?;
+                ui::order::send_message(&new_order, &mut bot, None, pcid,
+                                        Some("New order is published")).await?;
             },
             order::Status::Assigned => {
                 let assignee_uid = new_order.assigned.as_ref().unwrap().1;
@@ -193,18 +195,15 @@ async fn handle_order_action(
                         format!("Order is assigned to {assignee_link}");
 
                     let priv_chat_id: ChatId = uid.into();
-                    bot.send_message(priv_chat_id, msg).await?;
                     ui::order::send_message(
-                        &new_order, &mut bot, Some(uid), priv_chat_id).await?;
+                        &new_order, &mut bot, Some(uid),
+                        priv_chat_id, Some(msg)).await?;
 
                     // Send a public message sayng the order is taken
                     let msg = format!("Order is taken by {}",
                                       markup::user_link(&assignee));
-                    (&mut bot)
-                        .parse_mode(teloxide::types::ParseMode::Html)
-                        .send_message(pcid, msg).await?;
                     ui::order::send_message(
-                        &new_order, &mut bot, None, pcid).await?;
+                        &new_order, &mut bot, None, pcid, Some(msg)).await?;
                 } else {
                     // no assignee
                     log::warn!("Couldn't find assignee {assignee_uid}");

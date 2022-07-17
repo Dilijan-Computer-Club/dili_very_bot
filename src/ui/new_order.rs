@@ -65,7 +65,8 @@ async fn receive_description(
             &order,
             &mut bot,
             uid,
-            msg.chat.id).await?;
+            msg.chat.id,
+            Some("Created new order")).await?;
         dialogue.update(crate::State::Start).await?;
     } else {
         bot.send_message(dialogue.chat_id(), "No description").await?;
