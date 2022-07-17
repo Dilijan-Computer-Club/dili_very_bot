@@ -1,5 +1,5 @@
 use crate::Db;
-use crate::ui::{HandlerResult, MyDialogue, State};
+use crate::ui::{self, HandlerResult, MyDialogue, State};
 use teloxide::{
     prelude::*,
     types::Chat,
@@ -25,7 +25,7 @@ pub async fn show_my_orders(
             false => None,
         };
         for order in orders.iter() {
-            order.send_message_for(&mut bot, uid, chat.id).await?;
+            ui::order::send_message(&order, &mut bot, uid, chat.id).await?;
         }
     }
     dialogue.update(State::Start).await?;

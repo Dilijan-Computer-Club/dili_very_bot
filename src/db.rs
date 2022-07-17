@@ -545,7 +545,7 @@ impl InnerDb {
 
         self.update_user(cq.from.clone());
         if let Some(msg) = &cq.message {
-            self.collect_data_from_msg(&msg)?;
+            self.collect_data_from_msg(msg)?;
         }
         Ok(())
     }
@@ -563,13 +563,13 @@ impl InnerDb {
         self.update_chat(msg.clone().chat, msg.from());
         match &msg.kind {
             MessageKind::NewChatMembers(payload) => {
-                self.handle_new_chat_members(cid, &payload);
+                self.handle_new_chat_members(cid, payload);
             },
             MessageKind::LeftChatMember(payload) => {
-                self.handle_left_chat_members(cid, &payload);
+                self.handle_left_chat_members(cid, payload);
             },
             MessageKind::Common(payload) => {
-                self.gather_data_from_common_msg(&payload);
+                self.gather_data_from_common_msg(payload);
             },
             _ => {},
         }
@@ -692,7 +692,7 @@ impl InnerDb {
                 let u = self.users.get(uid).unwrap();
                 let s = format!("  ({uid}) {}, ", u.username.clone().unwrap_or_else(|| "<noname>".to_string()));
                 users.push_str(&s);
-                users.push_str("\n");
+                users.push('\n');
             }
             let num_orders = pc.orders.len();
             let s = format!("{name} ({pcid}); {num_users} users, {num_orders} orders, users: \n{users} ");

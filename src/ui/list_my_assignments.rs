@@ -1,5 +1,5 @@
 use teloxide::prelude::*;
-use crate::ui::{MyDialogue, HandlerResult};
+use crate::ui::{self, MyDialogue, HandlerResult};
 use crate::{Chat, Db};
 
 pub async fn list_my_assignments(
@@ -22,7 +22,7 @@ pub async fn list_my_assignments(
             false => None,
         };
         for order in orders.iter() {
-            order.send_message_for(&mut bot, uid, chat.id).await?;
+            ui::order::send_message(&order, &mut bot, uid, chat.id).await?;
         }
     }
     Ok(())

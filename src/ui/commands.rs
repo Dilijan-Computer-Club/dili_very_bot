@@ -2,13 +2,6 @@ use crate::{Db};
 use crate::ui::{self, HandlerResult};
 use teloxide::{
     prelude::*,
-    types::{
-        Chat, User,
-    },
-    dispatching::{
-        dialogue,
-        UpdateHandler
-    },
     utils::command::BotCommands,
 };
 

@@ -108,17 +108,17 @@ pub async fn handle_item(
                 bot, dialogue.chat_id()).await?;
         },
         MainMenuItem::ShowMyOrders => {
-            let pcid = ui::pcid_or_err(&bot, &db, &q, &dialogue).await?;
+            let pcid = ui::pcid_or_err(&bot, &db, q, &dialogue).await?;
             ui::show_my_orders(
                 bot, db, pcid, chat, q.from.id, dialogue).await?;
         },
         MainMenuItem::ListActiveOrders => {
-            let pcid = ui::pcid_or_err(&bot, &db, &q, &dialogue).await?;
+            let pcid = ui::pcid_or_err(&bot, &db, q, &dialogue).await?;
             ui::list_active_orders(
                 bot, db, pcid, chat, uid, dialogue).await?;
         },
         MainMenuItem::MyAssignments => {
-            let pcid = ui::pcid_or_err(&bot, &db, &q, &dialogue).await?;
+            let pcid = ui::pcid_or_err(&bot, &db, q, &dialogue).await?;
             ui::list_my_assignments(
                 bot, db, pcid, chat, uid, dialogue).await?;
         }

@@ -19,6 +19,8 @@ pub use list_active_orders::list_active_orders;
 
 pub mod commands;
 
+pub mod order;
+
 
 use crate::error::Error;
 pub type HandlerResult = Result<(), Error>;

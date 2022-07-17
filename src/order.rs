@@ -103,14 +103,6 @@ impl Order {
         }
     }
 
-    pub fn is_published(&self) -> bool {
-        self.published_at.is_some()
-    }
-
-    pub fn description_text(&self) -> String {
-        self.desc_msg.text.clone()
-    }
-
     fn role(&self, uid: UserId) -> Role {
         if self.from.id == uid {
             return Role::Owner;
@@ -171,49 +163,6 @@ impl Order {
         dumb_intersection(allowed_actions, available_actions)
     }
 
-    /// Send a message that shows this order
-    ///
-    /// Arguments
-    ///
-    /// uid: UserId for which we show the order actions
-    ///      None if it's a public message
-    pub async fn send_message_for(
-        &self,
-        bot: &mut AutoSend<Bot>,
-        uid: Option<UserId>,
-        chat_id: ChatId,
-    ) -> Result<(), Error> {
-        let bot = bot.parse_mode(teloxide::types::ParseMode::Html);
-
-        // TODO escape this
-        let description = &self.desc_msg.text;
-
-        let order_id = self.id
-            .ok_or("Could not make action for order without id")?;
-
-        let actions = match uid {
-            Some(uid) => self.user_actions(uid),
-            None      => self.public_actions(),
-        };
-
-        let actions: Vec<Action> =
-            actions.into_iter()
-            .map(|action| Action { kind: action, order_id })
-            .collect();
-        let buttons = actions_keyboard_markup(&actions);
-
-        let status = self.status();
-        let user_link = markup::user_link(&self.from);
-        let text = format!("\
-{user_link}
-{status}
-
-{description}");
-        bot.send_message(chat_id, text)
-            .reply_markup(buttons).await?;
-        Ok(())
-    }
-
     pub fn is_action_permitted(&self, uid: UserId, action: &Action) -> bool {
         let allowed = self.user_actions(uid);
         allowed.into_iter().any(|a| a == action.kind)
@@ -260,16 +209,6 @@ impl Order {
 
         Ok(prev_status)
     }
-}
-
-fn actions_keyboard_markup(actions: &[Action]) -> InlineKeyboardMarkup {
-    let btns: Vec<InlineKeyboardButton> = actions
-        .iter()
-        .map(|a| InlineKeyboardButton::callback(a.human_name(),
-                                                a.kbd_button_data()) )
-        .collect();
-    let rows: Vec<Vec<InlineKeyboardButton>> = btns.chunks(2).map(|c| c.to_vec()).collect();
-    InlineKeyboardMarkup::new(rows)
 }
 
 #[cfg(test)]

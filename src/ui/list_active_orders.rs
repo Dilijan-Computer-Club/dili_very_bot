@@ -1,7 +1,6 @@
-
 use teloxide::prelude::*;
 use crate::{Db, Chat};
-use crate::ui::{MyDialogue, HandlerResult};
+use crate::ui::{self, MyDialogue, HandlerResult};
 use crate::order;
 
 pub async fn list_active_orders(
@@ -24,7 +23,7 @@ pub async fn list_active_orders(
             false => None,
         };
         for order in orders.iter() {
-            order.send_message_for(&mut bot, uid, chat.id).await?;
+            ui::order::send_message(&order, &mut bot, uid, chat.id).await?;
         }
     }
     Ok(())

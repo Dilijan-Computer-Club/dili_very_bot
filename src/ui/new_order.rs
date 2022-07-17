@@ -5,6 +5,7 @@ use teloxide::{
 
 use crate::db::Db;
 use crate::order::Order;
+use crate::ui;
 
 use crate::error::Error;
 
@@ -60,7 +61,8 @@ async fn receive_description(
             false => None,
         };
 
-        order.send_message_for(
+        ui::order::send_message(
+            &order,
             &mut bot,
             uid,
             msg.chat.id).await?;

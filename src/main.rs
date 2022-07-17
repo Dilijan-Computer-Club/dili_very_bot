@@ -72,7 +72,7 @@ trying to handle ShowMyOrders q = {q:?}");
         match menu_item {
             Some(menu_item) =>
                 ui::main_menu::handle_item(
-                    bot, &q, db, &chat, &msg, uid, menu_item, dialogue).await?,
+                    bot, &q, db, chat, msg, uid, menu_item, dialogue).await?,
             None => {
                 // Fallback to generic callback query handler
                 log::info!("  -> Fallback to generic callback query handler");
@@ -181,7 +181,7 @@ async fn handle_order_action(
                         dialogue.chat_id(), "The order is published").await?;
                 }
                 // Send notification to public chat
-                new_order.send_message_for(&mut bot, None, pcid).await?;
+                ui::order::send_message(&new_order, &mut bot, None, pcid).await?;
             },
             order::Status::Assigned => {
                 let assignee_uid = new_order.assigned.as_ref().unwrap().1;
@@ -194,8 +194,8 @@ async fn handle_order_action(
 
                     let priv_chat_id: ChatId = uid.into();
                     bot.send_message(priv_chat_id, msg).await?;
-                    new_order.send_message_for(
-                        &mut bot, Some(uid), priv_chat_id).await?;
+                    ui::order::send_message(
+                        &new_order, &mut bot, Some(uid), priv_chat_id).await?;
 
                     // Send a public message sayng the order is taken
                     let msg = format!("Order is taken by {}",
@@ -203,8 +203,8 @@ async fn handle_order_action(
                     (&mut bot)
                         .parse_mode(teloxide::types::ParseMode::Html)
                         .send_message(pcid, msg).await?;
-                    new_order.send_message_for(
-                        &mut bot, None, pcid).await?;
+                    ui::order::send_message(
+                        &new_order, &mut bot, None, pcid).await?;
                 } else {
                     // no assignee
                     log::warn!("Couldn't find assignee {assignee_uid}");
