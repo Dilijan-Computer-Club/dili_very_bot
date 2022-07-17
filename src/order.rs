@@ -11,10 +11,14 @@ mod action_kind;
 mod action;
 mod status;
 mod role;
+mod action_error;
 pub use status::Status;
 pub use role::Role;
 pub use action::Action;
 pub use action_kind::ActionKind;
+pub use action_error::ActionError;
+use crate::utils::{dumb_intersection};
+use crate::markup;
 
 type Offset = chrono::offset::Utc;
 type DateTime = chrono::DateTime<Offset>;
@@ -27,16 +31,6 @@ impl fmt::Display for OrderId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
-}
-
-fn dumb_intersection<T: Clone + PartialEq>(aa: &[T], bb: &[T]) -> Vec<T> {
-    let mut res = Vec::with_capacity(aa.len().max(bb.len()));
-    for a in aa.iter() {
-        for b in bb.iter() {
-            if a == b { res.push(a.clone()) }
-        }
-    }
-    res
 }
 
 #[derive(Clone, Debug)]
@@ -171,14 +165,18 @@ impl Order {
     }
 
     pub fn public_actions(&self) -> Vec<ActionKind> {
-        let role = Role::UnrelatedUser;
         let available_actions = self.available_actions();
-        let allowed_actions = role.allowed_actions();
+        let allowed_actions = &[ActionKind::AssignToMe];
 
         dumb_intersection(allowed_actions, available_actions)
     }
 
     /// Send a message that shows this order
+    ///
+    /// Arguments
+    ///
+    /// uid: UserId for which we show the order actions
+    ///      None if it's a public message
     pub async fn send_message_for(
         &self,
         bot: &mut AutoSend<Bot>,
@@ -186,9 +184,10 @@ impl Order {
         chat_id: ChatId,
     ) -> Result<(), Error> {
         let bot = bot.parse_mode(teloxide::types::ParseMode::Html);
+
+        // TODO escape this
         let description = &self.desc_msg.text;
-        let username = format_username(&self.from);
-        let user_id = self.from.id;
+
         let order_id = self.id
             .ok_or("Could not make action for order without id")?;
 
@@ -204,8 +203,9 @@ impl Order {
         let buttons = actions_keyboard_markup(&actions);
 
         let status = self.status();
+        let user_link = markup::user_link(&self.from);
         let text = format!("\
-<a href=\"tg://user?id={user_id}\">{username}</a>
+{user_link}
 {status}
 
 {description}");
@@ -227,10 +227,9 @@ impl Order {
         &mut self,
         uid: UserId,
         action: &Action
-    ) -> Result<Status, Error> {
+    ) -> Result<Status, ActionError> {
         if ! self.is_action_permitted(uid, action) {
-            return Err(format!("Action {} is not permitted",
-                               action.kind.human_name()).into())
+            return Err(ActionError::NotPermitted)
         }
 
         let prev_status = self.status();
@@ -271,21 +270,6 @@ fn actions_keyboard_markup(actions: &[Action]) -> InlineKeyboardMarkup {
         .collect();
     let rows: Vec<Vec<InlineKeyboardButton>> = btns.chunks(2).map(|c| c.to_vec()).collect();
     InlineKeyboardMarkup::new(rows)
-}
-
-fn format_username(user: &User) -> String {
-    let first_name = &user.first_name;
-    let name = if let Some(last_name) = &user.last_name {
-        format!("{first_name} {last_name}")
-    } else {
-        first_name.to_string()
-    };
-
-    if let Some(username) = &user.username {
-        format!("@{username} {name}")
-    } else {
-        name
-    }
 }
 
 #[cfg(test)]

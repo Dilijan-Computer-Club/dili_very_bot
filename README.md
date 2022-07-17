@@ -2,8 +2,10 @@
 Telegram bot for managing deliveries to Dilijan
 
 ## TODOs
- - Separate group chat UI
+ - Status / debugging / stats information in tg
+ - Delete order doesn't work?
  - Support multiple group chats per user (ask chat on order creation)
+ - Handle error when user doesn't have a public chat
  - Support multiple languages
  - Notifications
  - Add optional private instructions for order

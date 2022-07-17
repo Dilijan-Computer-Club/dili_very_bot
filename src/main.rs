@@ -1,13 +1,12 @@
 #![feature(result_flattening)]
 #![allow(clippy::match_like_matches_macro)]
 
-use std::error::Error;
 use teloxide::{
     prelude::*,
     payloads::SendMessageSetters,
     types::{
         InlineKeyboardButton, InlineKeyboardMarkup,
-        Chat, UpdateKind
+        Chat, UpdateKind, User,
     },
     dispatching::{
         dialogue::{self, InMemStorage},
@@ -21,12 +20,15 @@ mod new_order;
 mod order;
 mod tg_msg;
 mod db;
+mod utils;
 mod urgency;
+mod markup;
 
 use db::Db;
+use crate::error::Error;
 pub use order::Order;
 
-type HandlerResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
+type HandlerResult = Result<(), Error>;
 
 #[derive(BotCommands, Clone)]
 #[command(rename = "snake_case",
@@ -38,6 +40,10 @@ enum Command {
     Menu,
     #[command(description = "Show help")]
     Help,
+    #[command(description = "Debugging")]
+    Debug,
+    #[command(description = "Greet the bot to make sure it knows you")]
+    Hello,
     #[command(description = "List active orders")]
     ListActiveOrders,
     #[command(description = "Show my orders")]
@@ -56,7 +62,7 @@ enum State {
 type MyDialogue = Dialogue<State, InMemStorage<State>>;
 type MyStorage = InMemStorage<State>;
 
-fn init_bot() -> Result<Bot, Box<dyn Error>> {
+fn init_bot() -> Result<Bot, Error> {
     use std::io::Read;
     let mut file = std::fs::File::open("key")?;
     let mut key = String::new();
@@ -69,10 +75,11 @@ async fn blah(db: Db, update: Update) -> bool {
     false
 }
 
-pub fn schema() -> UpdateHandler<Box<dyn Error + Send + Sync + 'static>> {
+pub fn schema() -> UpdateHandler<Error> {
     let command_handler = teloxide::filter_command::<Command, _>()
         .branch(dptree::case![Command::Menu].endpoint(main_menu))
         .branch(dptree::case![Command::Start].endpoint(main_menu))
+        .branch(dptree::case![Command::Debug].endpoint(debug_msg))
         .branch(dptree::case![Command::ListActiveOrders])
             .endpoint(list_active_orders);
 
@@ -136,7 +143,7 @@ async fn collect_data(
         UpdateKind::Error(_) => Ok(()),
     };
 
-    db.print_stats();
+    db.debug_stats().await?;
 
     ret
 }
@@ -150,7 +157,7 @@ async fn collect_data_from_msg(
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<(), Error> {
     pretty_env_logger::init();
     log::info!("Starting bot...");
 
@@ -216,6 +223,19 @@ impl MainMenuItem {
     }
 }
 
+/// Show some debugging info
+///
+/// TODO limit the displayed information to what's allowed
+async fn debug_msg(
+    bot: AutoSend<Bot>,
+    msg: Message,
+    db: Db,
+) -> HandlerResult {
+    let s = db.debug_stats().await?;
+    bot.send_message(msg.chat.id, s).await?;
+    Ok(())
+}
+
 /// Shows the main menu with buttons
 async fn main_menu(
     bot: AutoSend<Bot>,
@@ -232,7 +252,7 @@ async fn main_menu(
         MainMenuItem::public_items()
     };
     let main_menu_items = main_menu_items
-        .into_iter()
+        .iter()
         .map(|item| [InlineKeyboardButton::callback(
                         item.human_name(), item.id())]);
 
@@ -259,7 +279,7 @@ async fn list_active_orders(
     } else {
         bot.send_message(dialogue.chat_id(), "All active orders:").await?;
         let uid = match chat.is_private() {
-            true => Some(uid),
+            true =>  Some(uid),
             false => None,
         };
         for order in orders.iter() {
@@ -361,6 +381,19 @@ trying to handle ShowMyOrders q = {q:?}");
         }
         let msg = msg.as_ref().unwrap();
 
+        async fn pcid_or_err(bot: &AutoSend<Bot>, db: &Db,
+                             msg: &Message, dialogue: &MyDialogue
+        ) -> Result<ChatId, Error> {
+            let pcid = db.pub_chat_id_from_msg(msg.clone()).await;
+            match pcid {
+                Ok(pcid) => Ok(pcid),
+                Err(e) => {
+                    log::warn!("-> handle_callback_query pcid: {e:?}");
+                    bot.send_message(dialogue.chat_id(), format!("{e}")).await?;
+                    Err(format!("{e:?}").into())
+                }
+            }
+        }
 
         match menu_item {
             Some(MainMenuItem::NewOrder) => {
@@ -370,30 +403,15 @@ trying to handle ShowMyOrders q = {q:?}");
                     bot, dialogue.chat_id()).await?;
             },
             Some(MainMenuItem::ShowMyOrders) => {
-                let pcid = db.pub_chat_id_from_msg(msg.clone()).await?;
-                if pcid.is_none() {
-                    log::warn!("Could not get pcid from msg {:?}", &msg);
-                    return Ok(())
-                }
-                let pcid = pcid.unwrap();
+                let pcid = pcid_or_err(&bot, &db, msg, &dialogue).await?;
                 show_my_orders(bot, db, pcid, chat, q.from.id, dialogue).await?;
             },
             Some(MainMenuItem::ListActiveOrders) => {
-                let pcid = db.pub_chat_id_from_msg(msg.clone()).await?;
-                if pcid.is_none() {
-                    log::warn!("Could not get pcid from msg {:?}", &msg);
-                    return Ok(())
-                }
-                let pcid = pcid.unwrap();
+                let pcid = pcid_or_err(&bot, &db, msg, &dialogue).await?;
                 list_active_orders(bot, db, pcid, chat, uid, dialogue).await?;
             },
             Some(MainMenuItem::MyAssignments) => {
-                let pcid = db.pub_chat_id_from_msg(msg.clone()).await?;
-                if pcid.is_none() {
-                    log::warn!("Could not get pcid from msg {:?}", &msg);
-                    return Ok(())
-                }
-                let pcid = pcid.unwrap();
+                let pcid = pcid_or_err(&bot, &db, msg, &dialogue).await?;
                 list_my_assignments(bot, db, pcid, chat, uid, dialogue).await?;
             }
             None => {
@@ -435,16 +453,30 @@ query: {q:?}", q.data);
 
     let uid: UserId = q.from.id;
     if let Some(action) = order::Action::try_parse(&data) {
-        let pcid = db.pub_chat_id_from_msg(msg.clone()).await?;
-        if let Some(pcid) = pcid {
-            return handle_order_action(
-                bot, uid, pcid, action, db, dialogue).await;
+        log::info!("  got action from callback query {action:?}");
+        let pcid = db.pub_chat_id_from_msg(msg.clone()).await;
+        match pcid {
+            Ok(pcid) => {
+                let changed = handle_order_action(
+                    bot.clone(), uid, pcid, action, db, dialogue).await?;
+                if changed {
+                    bot.delete_message(msg.chat.id, msg.id).await?;
+                }
+            },
+            Err(e) => {
+                log::warn!("-> handle_unknown_callback_query pcid: {e:?}");
+                bot.send_message(dialogue.chat_id(), format!("{e}")).await?;
+            }
         }
     }
 
     Ok(())
 }
 
+/// Handles order button clicks
+///
+/// Returns true if order is changed and we need to delete the old message
+/// to avoid confusion
 async fn handle_order_action(
     mut bot: AutoSend<Bot>,
     uid: UserId,
@@ -452,13 +484,23 @@ async fn handle_order_action(
     action: order::Action,
     mut db: Db,
     dialogue: MyDialogue,
-) -> HandlerResult {
+) -> Result<bool, Error> {
     let action_type = action.kind;
-    let (prev_status, order) = db.perform_action(uid, pcid, action).await?;
+    let res = db.perform_action(uid, pcid, action).await;
+    if let Err(e) = res {
+        // handle error here
+        bot.send_message(dialogue.chat_id(), format!("{e}")).await?;
+        return Ok(false)
+    }
 
-    // TODO
+    let (prev_status, order) = res.unwrap();
+
+    let mut changed = false;
     if let Some(new_order) = order {
         let new_status = new_order.status();
+        if prev_status != new_status {
+            changed = true
+        }
         // status updated
 
         // reporting updates:
@@ -484,9 +526,39 @@ async fn handle_order_action(
                 // Send notification to public chat
                 new_order.send_message_for(&mut bot, None, pcid).await?;
             },
-            order::Status::Assigned => {},
-            order::Status::MarkedAsDelivered => {},
-            order::Status::DeliveryConfirmed => {},
+            order::Status::Assigned => {
+                let assignee_uid = new_order.assigned.as_ref().unwrap().1;
+                let assignee: Option<User> = db.get_user(assignee_uid).await?;
+                if let Some(assignee) = assignee {
+                    // Send a private message to the order owner
+                    if let Some(priv_chat_id) = db.get_priv_chat_id(uid).await? {
+                        let assignee_link = markup::user_link(&assignee);
+                        let msg =
+                            format!("Order is assigned to {assignee_link}");
+                        bot.send_message(priv_chat_id, msg).await?;
+                        new_order.send_message_for(
+                            &mut bot, Some(uid), priv_chat_id).await?;
+                    }
+
+                    // Send a public message sayng the order is taken
+                    let msg = format!("Order is taken by {}",
+                                      markup::user_link(&assignee));
+                    (&mut bot)
+                        .parse_mode(teloxide::types::ParseMode::Html)
+                        .send_message(pcid, msg).await?;
+                    new_order.send_message_for(
+                        &mut bot, None, pcid).await?;
+                } else {
+                    // no assignee
+                    log::warn!("Couldn't find assignee {assignee_uid}");
+                }
+            },
+            order::Status::MarkedAsDelivered => {
+                // TODO notifications
+            },
+            order::Status::DeliveryConfirmed => {
+                // TODO notifications
+            },
         }
 
         // bot.send_message(dialogue.chat_id(),
@@ -496,5 +568,5 @@ async fn handle_order_action(
         bot.send_message(dialogue.chat_id(), "Deleted the order").await?;
     }
 
-    Ok(())
+    Ok(changed)
 }

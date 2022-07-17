@@ -14,7 +14,6 @@ type HandlerResult = Result<(), Error>;
 pub enum State {
     #[default]
     Start, // receive name
-    DescReceived { name: String }
 }
 
 pub fn schema() -> UpdateHandler<Error> {
@@ -39,13 +38,16 @@ async fn receive_description(
     dialogue: crate::MyDialogue,
 ) -> HandlerResult {
     log::info!("-> receive_description");
-    db.print_stats();
-    let pcid = db.pub_chat_id_from_msg(msg.clone()).await?;
-    if pcid.is_none() {
-        log::warn!("Could not get pcid from msg {:?}", &msg);
-        return Ok(())
-    }
-    let pcid = pcid.unwrap();
+    db.debug_stats().await?;
+    let pcid = db.pub_chat_id_from_msg(msg.clone()).await;
+    let pcid = match pcid {
+        Err(e) => {
+            log::warn!(" -> recv_desc: Could not get pcid from msg {:?}", &msg);
+            bot.send_message(dialogue.chat_id(), format!("{e}")).await?;
+            return Err(format!("{e}").into());
+        },
+        Ok(pcid) => pcid,
+    };
 
     if let Some(text) = msg.text() {
         log::info!("Description: {text}");

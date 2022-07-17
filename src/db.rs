@@ -3,11 +3,43 @@ use teloxide::prelude::*;
 use teloxide::types::{User, Chat, MessageKind, MessageCommon, ChatKind,
                       MessageNewChatMembers, MessageLeftChatMember};
 use std::sync::{Arc, RwLock};
+use std::fmt;
 use std::collections::BTreeMap;
 use crate::error::Error;
-
 use crate::order::{self, Order, OrderId, Action, ActionKind, Status};
+use crate::order::ActionError;
 
+#[derive(Clone, Copy, Debug)]
+pub enum PubChatFromMsgError {
+    /// We don't see the user in any public chats
+    NotInPubChats,
+
+    /// User is in multiple chats, so we need to ask which one they want
+    MultipleChats,
+
+    /// Other technical error, like we couldn't access the db or something
+    Other,
+}
+
+impl fmt::Display for PubChatFromMsgError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // write!(f, "({}, {})", self.x, self.y)
+        match self {
+            PubChatFromMsgError::NotInPubChats => {
+                write!(f, "You are not in any public chat with this bot.
+Try writting '/hello' into the public chat you're in to make sure \
+the bot knows you're there")
+            },
+            PubChatFromMsgError::MultipleChats => {
+                // TODO support for multiple chats per user
+                write!(f, "You are in multiple chats. This is not supported yet. Sorry!")
+            },
+            PubChatFromMsgError::Other => {
+                write!(f, "Some error occured")
+            }
+        }
+    }
+}
 
 /// Wrapper for InnerDb that is Send, Sync, and async
 #[derive(Clone)]
@@ -33,20 +65,50 @@ impl Db {
         }).await.map_err(|e| format!("{e:?}").into()).flatten()
     }
 
-    pub fn print_stats(&self) {
-        let db = self.db.read().unwrap();
-        db.print_stats()
-    }
-
-    pub async fn pub_chat_id_from_msg(
-        &self,
-        msg: Message,
-    ) -> Result<Option<ChatId>, Error> {
+    pub async fn debug_stats(&self) -> Result<String, Error> {
         let db = self.db.clone();
         spawn_blocking(move || {
             let db = db.read().map_err(|e| format!("Rlock: {e:?}"))?;
-            Ok(db.pub_chat_id_from_msg(msg))
+            Ok(db.debug_stats())
         }).await.map_err(|e| format!("{e:?}").into()).flatten()
+    }
+
+    pub async fn get_priv_chat_id(&self, uid: UserId) -> Result<Option<ChatId>, Error> {
+        let db = self.db.clone();
+        spawn_blocking(move || {
+            let db = db.read().map_err(|e| format!("Rlock: {e:?}"))?;
+            Ok(db.get_priv_chat_id(uid))
+        }).await.map_err(|e| format!("{e:?}").into()).flatten()
+    }
+
+    pub async fn get_user(&self, uid: UserId) -> Result<Option<User>, Error> {
+        let db = self.db.clone();
+        spawn_blocking(move || {
+            let db = db.read().map_err(|e| format!("Rlock: {e:?}"))?;
+            Ok(db.get_user(uid).cloned())
+        }).await.map_err(|e| format!("{e:?}").into()).flatten()
+    }
+    pub async fn pub_chat_id_from_msg(
+        &self,
+        msg: Message,
+    ) -> Result<ChatId, PubChatFromMsgError> {
+        let db = self.db.clone();
+        let ret = spawn_blocking(move || {
+            let db = db.read();
+            if let Err(e) = db {
+                log::warn!("RLock: {e:?}");
+                return Err(PubChatFromMsgError::Other);
+            }
+            let db = db.unwrap();
+            db.pub_chat_id_from_msg(msg)
+        }).await;
+        match ret {
+            Ok(ret) => ret,
+            Err(e) => {
+                log::warn!("pub_chat_id_from_msg error: {e:?}");
+                Err(PubChatFromMsgError::Other)
+            }
+        }
     }
 
     pub async fn orders_by_status(
@@ -92,12 +154,25 @@ impl Db {
         uid: UserId,
         pcid: ChatId,
         action: Action,
-    ) -> Result<(order::Status, Option<Order>), Error> {
+    ) -> Result<(order::Status, Option<Order>), ActionError> {
         let db = self.db.clone();
-        spawn_blocking(move || {
-            let mut db = db.write().map_err(|e| format!("lock: {e:?}"))?;
+        let res = spawn_blocking(move || {
+            let db = db.write();
+            if let Err(e) = db {
+                log::warn!("WLock: {e:?}");
+                return Err(ActionError::Other);
+            }
+            let mut db = db.unwrap();
             db.perform_action(uid, pcid, &action)
-        }).await.map_err(|e| format!("{e:?}").into()).flatten()
+        }).await;
+
+        match res {
+            Ok(res) => res,
+            Err(e) => {
+                log::warn!("Error while performing action: {e:?}");
+                Err(ActionError::Other)
+            }
+        }
     }
 
     pub async fn collect_data_from_msg(
@@ -319,11 +394,10 @@ impl InnerDb {
         &mut self,
         pub_chat_id: ChatId,
         order_id: OrderId
-    ) -> Result<order::Status, Error> {
+    ) -> Result<order::Status, ActionError> {
         let pub_chat = self.pub_chat_mut(pub_chat_id);
         if pub_chat.is_none() {
-            return Err(format!(
-                    "could not find public chat {pub_chat_id}").into())
+            return Err(ActionError::PubChatNotFound)
         }
         let pub_chat = pub_chat.unwrap();
 
@@ -334,7 +408,7 @@ impl InnerDb {
                 return Ok(status);
             }
         }
-        Err(format!("Could not find order {:?}", order_id).into())
+        Err(ActionError::OrderNotFound(order_id))
     }
 
     /// performs the action, returns modified order if successful
@@ -343,46 +417,65 @@ impl InnerDb {
         uid: UserId,
         pub_chat_id: ChatId,
         action: &Action,
-    ) -> Result<(order::Status, Option<Order>), Error> {
+    ) -> Result<(order::Status, Option<Order>), ActionError> {
 
         if action.kind == ActionKind::Delete {
             let order = self.find_order(pub_chat_id, action.order_id)
-                .ok_or_else(|| format!("Could not find order {:?}",
-                                       action.order_id))?;
+                .ok_or(ActionError::OrderNotFound(action.order_id))?;
             if ! order.is_action_permitted(uid, action) {
-                return Err(format!("Action {} is not permitted",
-                                   action.kind.human_name()).into())
+                return Err(ActionError::NotPermitted)
             }
 
             let status = self.delete_order(pub_chat_id, action.order_id)?;
             Ok((status, None))
         } else {
             let order = self.find_order_mut(pub_chat_id, action.order_id)
-                .ok_or_else(|| format!("Could not find order {:?}",
-                                       action.order_id))?;
+                .ok_or(ActionError::OrderNotFound(action.order_id))?;
             let prev_status = order.perform_action(uid, action)?;
             Ok((prev_status, Some(order.clone())))
         }
     }
 
+    pub fn get_priv_chat_id(&self, uid: UserId) -> Option<ChatId> {
+        self.private_chats.iter()
+            .find(|(_, cuid)| *cuid == uid)
+            .map(|(cid, _)| cid)
+            .cloned()
+    }
+
+    pub fn get_user(&self, uid: UserId) -> Option<&User> {
+        self.users.get(&uid)
+    }
+
     /// Try to figure out which public chat the message belongs to
-    pub fn pub_chat_id_from_msg(&self, msg: Message) -> Option<ChatId> {
+    pub fn pub_chat_id_from_msg(
+        &self,
+        msg: Message
+    ) -> Result<ChatId, PubChatFromMsgError> {
         // if msg.is public then that's it
         // otherwise if user is present find them in chats, if there is one
         //   then that's it
+        // return appropriate error otherwise
         if let ChatKind::Public(_) = msg.chat.kind {
-            return Some(msg.chat.id)
+            return Ok(msg.chat.id)
         }
 
-        let user = msg.from()?;
+        let user = match msg.from() {
+            Some(user) => user,
+            None => {
+                log::warn!("No user in message {msg:?}");
+                return Err(PubChatFromMsgError::Other)
+            },
+        };
 
         let mut pub_chats = self.public_chats.iter()
             .filter(|pc| pc.members.iter().any(|u| *u == user.id));
         let pc = pub_chats.next();
-        if pc.is_some() && pub_chats.next().is_none() {
-            return Some(pc?.chat.id)
+        if pc.is_none() { return Err(PubChatFromMsgError::NotInPubChats) }
+        if pub_chats.next().is_some() {
+            return Err(PubChatFromMsgError::MultipleChats)
         }
-        None
+        Ok(pc.unwrap().chat.id)
     }
 
     pub fn collect_data_from_msg(
@@ -505,7 +598,7 @@ impl InnerDb {
         }
     }
 
-    pub fn print_stats(&self) {
+    pub fn debug_stats(&self) -> String {
         let max_id = self.max_id;
         let num_private_chats = self.private_chats.len();
         let num_public_chats = self.public_chats.len();
@@ -515,7 +608,7 @@ impl InnerDb {
         for u in self.users.values() {
             let name = format!(
                 "@{} {}, ",
-                u.username.clone().unwrap_or("<noname>".to_string()),
+                u.username.clone().unwrap_or_else(|| "<noname>".to_string()),
                 u.first_name);
             users.push_str(name.as_ref());
         }
@@ -529,14 +622,14 @@ impl InnerDb {
             num_orders += pc.orders.len();
             for uid in pc.members.iter() {
                 let u = self.users.get(uid).unwrap();
-                let s = format!("{}, ", u.username.clone().unwrap_or("<noname>".to_string()));
+                let s = format!("{}, ", u.username.clone().unwrap_or_else(|| "<noname>".to_string()));
                 users.push_str(&s);
             }
             let num_orders = pc.orders.len();
             let s = format!("{name} {num_users} users, {num_orders} orders, users: {users} ");
             pub_chats.push_str(&s);
         }
-        log::info!("\
+        let s = format!("\
 Data:
 max_id =       {max_id}
 Private chats: {num_private_chats}
@@ -550,5 +643,7 @@ Users:
 Public chats:
 {pub_chats}
 ");
+        log::info!("{s}");
+        s
     }
 }
