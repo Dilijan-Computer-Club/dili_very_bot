@@ -1,8 +1,4 @@
-use teloxide::{
-    prelude::*,
-    types::{InlineKeyboardButton, InlineKeyboardMarkup}
-};
-
+use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
 use crate::urgency::Urgency;
 
 const BTN_PREFIX: &str = "urg";
@@ -27,7 +23,8 @@ pub fn from_id(u: &str) -> Option<Urgency> {
 }
 
 pub fn keyboard_markup() -> InlineKeyboardMarkup {
-    let btns = Urgency::ALL.iter().map(|u| [InlineKeyboardButton::callback(u.name(), id(u))] );
+    let btns = Urgency::ALL.iter()
+        .map(|u| [InlineKeyboardButton::callback(u.name(), id(u))] );
     InlineKeyboardMarkup::new(btns)
 }
 

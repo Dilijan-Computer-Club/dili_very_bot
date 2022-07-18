@@ -1,6 +1,4 @@
-use teloxide::{
-    prelude::*,
-};
+use teloxide::prelude::*;
 
 use crate::error::Error;
 

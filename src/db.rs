@@ -58,7 +58,7 @@ impl Db {
     ) -> Result<Vec<PublicChat>, Error> {
         let db = self.db.clone();
         spawn_blocking(move || {
-            let mut db = db.write().map_err(|e| format!("lock: {e:?}"))?;
+            let db = db.write().map_err(|e| format!("lock: {e:?}"))?;
             Ok(db.public_chats.iter()
                 .filter(|pc| pc.has_user(uid))
                 .cloned()
@@ -554,7 +554,8 @@ impl InnerDb {
     ) {
         let chat = self.public_chats.iter_mut().find(|c| c.chat.id == cid);
         if chat.is_none() {
-            log::warn!("update_chat_membership Weird that we couldn't find pub chat {cid}");
+            log::warn!("update_chat_membership:
+Weird that we couldn't find pub chat {cid}");
             return;
         }
         let chat = chat.unwrap();

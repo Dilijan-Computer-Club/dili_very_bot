@@ -1,7 +1,6 @@
 use std::fmt;
 use teloxide::{ prelude::*, types::User };
 use crate::tg_msg::TgMsg;
-use crate::error::Error;
 use crate::urgency::Urgency;
 
 mod action_kind;
@@ -66,29 +65,6 @@ pub struct Order {
 }
 
 impl Order {
-    // TODO should replace this with something else
-    pub fn from_tg_msg(tg_msg: &Message) -> Result<Order, Error> {
-        let msg = TgMsg::from_tg_msg(tg_msg)?;
-        let from = match tg_msg.from() {
-            Some(user) => user,
-            None => return Err("No 'from' in message".into()),
-        };
-
-        Ok(Order {
-            id: None,
-            created_at: chrono::offset::Utc::now(),
-            price_in_drams: 0,
-            canceled_at: None,
-            delivered: None,
-            published_at: None,
-            urgency: Urgency::Whenever,
-            desc_msg: msg,
-            from: from.clone(),
-            assigned: None,
-            delivery_confirmed_at: None,
-        })
-    }
-
     /// Returns true if is assigned and not completed yet
     pub fn is_active_assignment(&self) -> bool {
         match self.status() {
@@ -244,7 +220,7 @@ mod tests {
             published_at: None,
             urgency: Urgency::Whenever,
             desc_msg: msg,
-            from: from.clone(),
+            from: from,
             assigned: None,
             delivery_confirmed_at: None,
         };
@@ -268,7 +244,7 @@ mod tests {
 
         // happy path, but confirmed without marking as delivered
         {
-            let mut order = order.clone();
+            let mut order = order;
 
             act(&mut order, ActionKind::Publish,         publisher, Status::Published);
             act(&mut order, ActionKind::AssignToMe,      assignee,  Status::Assigned);

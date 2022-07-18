@@ -11,7 +11,7 @@ use std::num::IntErrorKind;
 use crate::error::Error;
 use crate::MyDialogue;
 
-use crate::urgency::Urgency;
+
 
 type HandlerResult = Result<(), Error>;
 
@@ -51,11 +51,10 @@ pub async fn send_initial_message(
 async fn receive_name(
     bot: AutoSend<Bot>,
     msg: Message,
-    db: Db,
+    _db: Db,
     dialogue: MyDialogue,
 ) -> HandlerResult {
     log::info!("-> receive_name");
-    // let pcid = get_pcid(&mut bot, &dialogue, &mut db, &msg).await?;
 
     if msg.text().is_none() {
         bot.send_message(dialogue.chat_id(), "You haven't written your \
@@ -66,33 +65,17 @@ the name of your order").await?;
     let text = msg.text().unwrap();
 
     log::info!("Description: {text}");
-    // Creating the order here
-    //
-    // let mut order = Order::from_tg_msg(&msg)?;
-    // let order_id = db.add_order(pcid, &order).await?;
-    // order.id = Some(order_id);
-    // let uid = match msg.chat.is_private() {
-    //     true  => Some(order.from.id),
-    //     false => None,
-    // };
-
-    // ui::order::send_message(&order, &mut bot, uid, msg.chat.id,
-    //                         Some("Created new order")).await?;
-
     bot.send_message(dialogue.chat_id(),
                      "How much is it in Armenian Drams? \
 A rough estimate is enough. Say 0 if it's already paid for").await?;
     change_state(dialogue, State::ReceivedName { name: text.to_string() }).await?;
 
-
-    // exit_dialogue(dialogue).await?;
     Ok(())
 }
 
 async fn receive_price(
     bot: AutoSend<Bot>,
     msg: Message,
-    db: Db,
     dialogue: MyDialogue,
     name: String,
 ) -> HandlerResult {
@@ -202,8 +185,7 @@ before other people can see it")).await?;
 
     // have multiple pub chats
     todo!("Support multiple pub chats");
-
-    Ok(())
+    // Ok(())
 }
 
 async fn change_state(dialogue: MyDialogue, state: State) -> HandlerResult {
@@ -228,7 +210,7 @@ async fn get_pcid(
         Err(e) => {
             log::warn!(" -> recv_desc: Could not get pcid from msg {:?}", &msg);
             bot.send_message(dialogue.chat_id(), format!("{e}")).await?;
-            return Err(format!("{e}").into());
+            Err(format!("{e}").into())
         },
         Ok(pcid) => Ok(pcid),
     }
