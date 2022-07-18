@@ -4,7 +4,8 @@
 use teloxide::{
     prelude::*,
     types::Chat,
-    dispatching::{ dialogue, UpdateHandler },
+    dispatching::{dialogue, UpdateHandler},
+    dispatching::dialogue::{ErasedStorage, RedisStorage, Storage},
 };
 
 mod error;
@@ -20,10 +21,11 @@ mod data_gathering;
 
 use db::Db;
 use crate::error::Error;
-use crate::ui::{State, MyDialogue, MyStorage, HandlerResult};
+use crate::ui::{State, MyDialogue, HandlerResult, MyStorage};
 
 pub type Offset = chrono::offset::Utc;
 pub type DateTime = chrono::DateTime<Offset>;
+const REDIS_URL: &'static str = "redis://127.0.0.1/";
 
 
 fn init_bot() -> Result<Bot, Error> {
@@ -143,7 +145,7 @@ pub fn schema() -> UpdateHandler<Error> {
         Update::filter_callback_query()
             .endpoint(handle_callback_query);
 
-    dialogue::enter::<Update, MyStorage, State, _>()
+    dialogue::enter::<Update, ErasedStorage<State>, State, _>()
         .branch(dptree::filter_async(collect_data_handler))
         .branch(dptree::case![State::NewOrder(no)]
                 .branch(ui::new_order::schema()))
@@ -161,9 +163,14 @@ async fn main() -> Result<(), Error> {
 
     let bot = init_bot()?.auto_send();
 
+    // let storage = MyStorage::new();
+    let storage: MyStorage =
+        RedisStorage::open(REDIS_URL, dialogue::serializer::Json)
+            .await?.erase();
     Dispatcher::builder(bot, schema())
-        .dependencies(dptree::deps![MyStorage::new(), db])
-        .build() // .setup_ctrlc_handler()
+        .dependencies(dptree::deps![storage, db])
+        .build()
+        .setup_ctrlc_handler()
         .dispatch()
         .await;
 

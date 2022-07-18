@@ -9,7 +9,7 @@ edition = "2021"
 log = "0.4.17"
 pretty_env_logger = { version = "0.4.0", features = [], default-features = false }
 # env_logger =    { version = "*", features = [], default-features = false}
-teloxide =  { version = "0.9.2", features = ["macros"] }
+teloxide =  { version = "0.9.2", features = ["macros", "redis-storage"] }
 tokio =    { version = "1.19.2", features = ["macros", "rt-multi-thread"] }
 chrono =   { version = "0.4.19", features = ["clock", "serde"], default-features = false }
 askama_escape = { version = "0.10.3", features = [], default-features = false }

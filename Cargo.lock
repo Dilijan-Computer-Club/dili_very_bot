@@ -205,7 +205,7 @@ dependencies = [
  "chrono",
  "log",
  "pretty_env_logger",
- "redis",
+ "redis 0.21.5",
  "serde",
  "serde_json",
  "teloxide",
@@ -875,6 +875,26 @@ dependencies = [
 
 [[package]]
 name = "redis"
+version = "0.20.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d4f0ceb2ec0dd769483ecd283f6615aa83dcd0be556d5294c6e659caefe7cc54"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "combine",
+ "dtoa",
+ "futures-util",
+ "itoa 0.4.8",
+ "percent-encoding",
+ "pin-project-lite",
+ "sha1",
+ "tokio",
+ "tokio-util 0.6.10",
+ "url",
+]
+
+[[package]]
+name = "redis"
 version = "0.21.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1a80b5f38d7f5a020856a0e16e40a9cfabf88ae8f0e4c2dcd8a3114c1e470852"
@@ -1167,6 +1187,7 @@ dependencies = [
  "log",
  "mime",
  "pin-project",
+ "redis 0.20.2",
  "serde",
  "serde_json",
  "serde_with_macros",

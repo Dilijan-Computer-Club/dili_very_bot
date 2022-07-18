@@ -11,12 +11,11 @@ use std::num::IntErrorKind;
 use crate::error::Error;
 use crate::MyDialogue;
 use crate::data_gathering;
-
-
+use serde::{Serialize, Deserialize};
 
 type HandlerResult = Result<(), Error>;
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub enum State {
     #[default]
     Start, // receive name

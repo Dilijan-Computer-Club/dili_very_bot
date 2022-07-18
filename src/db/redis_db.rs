@@ -27,9 +27,11 @@ pub struct Db {
     c: redis::aio::ConnectionManager,
 }
 
+use crate::REDIS_URL;
+
 impl Db {
     pub async fn new() -> Result<Self, Error> {
-        let client = redis::Client::open("redis://127.0.0.1/")
+        let client = redis::Client::open(REDIS_URL)
             .map_err(to_err)?;
         let connection = client.get_tokio_connection_manager()
             .await.map_err(to_err)?;
