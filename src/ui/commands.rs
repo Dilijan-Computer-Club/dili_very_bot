@@ -31,7 +31,7 @@ pub enum Command {
 async fn debug_msg(
     bot: AutoSend<Bot>,
     msg: Message,
-    db: Db,
+    mut db: Db,
 ) -> HandlerResult {
     let s = db.debug_stats().await?;
     bot.send_message(msg.chat.id, s).await?;

@@ -5,7 +5,7 @@ use crate::order;
 
 pub async fn list_active_orders(
     mut bot: AutoSend<Bot>,
-    db: Db,
+    mut db: Db,
     pcid: ChatId,
     chat: &Chat,
     uid: UserId,

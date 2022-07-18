@@ -16,6 +16,7 @@ mod urgency;
 mod markup;
 mod ui;
 mod public_chat;
+mod data_gathering;
 
 use db::Db;
 use crate::error::Error;
@@ -49,7 +50,7 @@ async fn handle_callback_query(
     dialogue: MyDialogue
 ) -> HandlerResult {
     log::info!("-> handle_callback_query");
-    db.collect_data_from_cq(q.clone()).await?;
+    data_gathering::collect_data_from_cq(&mut db, q.clone()).await?;
     log::debug!("   query: {q:?}");
 
     let uid = q.from.id;
@@ -84,7 +85,7 @@ trying to handle ShowMyOrders q = {q:?}");
 async fn handle_unknown_callback_query(
     bot: AutoSend<Bot>,
     q: CallbackQuery,
-    db: Db,
+    mut db: Db,
     dialogue: MyDialogue
 ) -> HandlerResult {
     log::info!("-> handle_callback_query
@@ -105,7 +106,7 @@ query: {q:?}", q.data);
     let action = action.unwrap();
 
     log::info!("  got action from callback query {action:?}");
-    let pcid = db.pub_chat_id_from_cq(q.clone()).await;
+    let pcid = data_gathering::pub_chat_id_from_cq(&mut db, q.clone()).await;
     if let Err(e) = pcid {
         log::warn!("-> handle_unknown_callback_query pcid: {e:?}");
         bot.send_message(dialogue.chat_id(), format!("{e}")).await?;
@@ -156,7 +157,7 @@ async fn main() -> Result<(), Error> {
     pretty_env_logger::init();
     log::info!("Starting bot...");
 
-    let db = Db::new();
+    let db = Db::new().await?;
 
     let bot = init_bot()?.auto_send();
 

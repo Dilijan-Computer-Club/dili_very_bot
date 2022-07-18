@@ -4,7 +4,7 @@ use crate::{Chat, Db};
 
 pub async fn list_my_assignments(
     mut bot: AutoSend<Bot>,
-    db: Db,
+    mut db: Db,
     pcid: ChatId,
     chat: &Chat,
     uid: UserId,

@@ -28,6 +28,8 @@ pub type HandlerResult = Result<(), Error>;
 pub type MyDialogue = Dialogue<State, InMemStorage<State>>;
 pub type MyStorage = InMemStorage<State>;
 
+use crate::data_gathering;
+
 #[derive(Clone, Default, Debug)]
 pub enum State {
     #[default]
@@ -35,10 +37,10 @@ pub enum State {
     NewOrder(new_order::State)
 }
 
-pub async fn pcid_or_err(bot: &AutoSend<Bot>, db: &crate::Db,
+pub async fn pcid_or_err(bot: &AutoSend<Bot>, db: &mut crate::Db,
     cq: &CallbackQuery, dialogue: &MyDialogue
 ) -> Result<ChatId, Error> {
-    let pcid = db.pub_chat_id_from_cq(cq.clone()).await;
+    let pcid = data_gathering::pub_chat_id_from_cq(db, cq.clone()).await;
     match pcid {
         Ok(pcid) => Ok(pcid),
         Err(e) => {
