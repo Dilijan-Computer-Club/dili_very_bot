@@ -7,7 +7,7 @@ use teloxide::{
 
 pub async fn show_my_orders(
     mut bot: AutoSend<Bot>,
-    db: Db,
+    mut db: Db,
     pcid: ChatId,
     chat: &Chat,
     uid: UserId,

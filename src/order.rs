@@ -16,8 +16,9 @@ pub use action_error::ActionError;
 use crate::utils::dumb_intersection;
 use crate::Offset;
 use crate::DateTime;
+use serde::{Serialize, Deserialize};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(transparent)]
 pub struct OrderId(pub u64);
 
@@ -27,7 +28,7 @@ impl fmt::Display for OrderId {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Order {
     /// Id of this order, None if not persisted in the database
     pub id: Option<OrderId>,

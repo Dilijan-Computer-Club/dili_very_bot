@@ -3,6 +3,7 @@ Telegram bot for managing deliveries to Dilijan
 
 ## TODOs
  - `/cancel` to stop creating the order, or other things
+ - `/help`
  - Edit own orders
  - Admin UI
  - Hide outdated orders
@@ -18,6 +19,8 @@ Telegram bot for managing deliveries to Dilijan
 - Put a Telegram bot key into the `key` file
 - `cargo run`
 
+Set `RUST_LOG` to `info` or `debug` for more verbose logging.
+
 ## Usage
  - Create a group chat and invite the bot into it
  - Create orders by sending `/start` command in a private message to the bot
@@ -25,6 +28,9 @@ Telegram bot for managing deliveries to Dilijan
 - Find orders either in the group chat or in a private chat with the bot
 
 ## Bulid requirements
+### Rust nightly
+Easy to install via https://rustup.rs
+
 ### Debian / Ubuntu
 ```sh
 apt install build-essential libssl-dev pkg-config

@@ -66,7 +66,7 @@ the publisher confirms they've received it.").await?;
             let msg = format!("{assignee_link} marked order as delivered. \
 Please confirm it.");
 
-            let priv_chat_id: ChatId = uid.into();
+            let priv_chat_id: ChatId = ChatId(order.from.id.0 as i64);
             ui::order::send_message(
                 &order, &mut bot, Some(uid), priv_chat_id, Some(msg)).await?;
 
@@ -183,7 +183,7 @@ pub async fn delivery_confirmed_notifications(
 }
 
 async fn get_assignee_link(
-    db: Db,
+    mut db: Db,
     order: &Order,
 ) -> Result<String, Error> {
     let assignee_uid = order.assigned.as_ref().unwrap().1;

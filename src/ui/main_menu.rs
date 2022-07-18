@@ -9,6 +9,7 @@ use teloxide::{
         Chat,
     },
 };
+use crate::data_gathering;
 
 #[derive(Clone, Copy, Debug)]
 pub enum MainMenuItem {
@@ -65,7 +66,8 @@ pub async fn main_menu(
     msg: Message,
     mut db: Db,
 ) -> HandlerResult {
-    db.collect_data_from_msg(msg.clone()).await?;
+    data_gathering::collect_data_from_msg(
+        &mut db, msg.clone()).await?;
 
     let main_menu_items = if msg.chat.is_private() {
         log::info!("-> main_menu private");
@@ -90,7 +92,7 @@ pub async fn main_menu(
 pub async fn handle_item(
     bot: AutoSend<Bot>,
     q: &CallbackQuery,
-    db: Db,
+    mut db: Db,
     chat: &Chat,
     msg: &Message,
     uid: UserId,
@@ -108,17 +110,17 @@ pub async fn handle_item(
                 bot, dialogue.chat_id()).await?;
         },
         MainMenuItem::ShowMyOrders => {
-            let pcid = ui::pcid_or_err(&bot, &db, q, &dialogue).await?;
+            let pcid = ui::pcid_or_err(&bot, &mut db, q, &dialogue).await?;
             ui::show_my_orders(
                 bot, db, pcid, chat, q.from.id, dialogue).await?;
         },
         MainMenuItem::ListActiveOrders => {
-            let pcid = ui::pcid_or_err(&bot, &db, q, &dialogue).await?;
+            let pcid = ui::pcid_or_err(&bot, &mut db, q, &dialogue).await?;
             ui::list_active_orders(
                 bot, db, pcid, chat, uid, dialogue).await?;
         },
         MainMenuItem::MyAssignments => {
-            let pcid = ui::pcid_or_err(&bot, &db, q, &dialogue).await?;
+            let pcid = ui::pcid_or_err(&bot, &mut db, q, &dialogue).await?;
             ui::list_my_assignments(
                 bot, db, pcid, chat, uid, dialogue).await?;
         }

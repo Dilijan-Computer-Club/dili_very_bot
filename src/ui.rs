@@ -1,7 +1,8 @@
 use teloxide::{
     prelude::*,
-    dispatching::dialogue::InMemStorage,
+    dispatching::dialogue,
 };
+use serde::{Serialize, Deserialize};
 
 mod collect_data;
 pub use collect_data::collect_data;
@@ -23,22 +24,27 @@ pub mod order_action;
 pub mod urgency;
 
 
+use std::sync::Arc;
 use crate::error::Error;
 pub type HandlerResult = Result<(), Error>;
-pub type MyDialogue = Dialogue<State, InMemStorage<State>>;
-pub type MyStorage = InMemStorage<State>;
+pub type MyDialogue = Dialogue<State, dialogue::ErasedStorage<State>>;
+// pub type MyStorage = dialogue::InMemStorage<State>;
+// pub type MyStorage = dialogue::RedisStorage<State>;
+pub type MyStorage = Arc<dialogue::ErasedStorage<State>>;
 
-#[derive(Clone, Default, Debug)]
+use crate::data_gathering;
+
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub enum State {
     #[default]
     Start,
     NewOrder(new_order::State)
 }
 
-pub async fn pcid_or_err(bot: &AutoSend<Bot>, db: &crate::Db,
+pub async fn pcid_or_err(bot: &AutoSend<Bot>, db: &mut crate::Db,
     cq: &CallbackQuery, dialogue: &MyDialogue
 ) -> Result<ChatId, Error> {
-    let pcid = db.pub_chat_id_from_cq(cq.clone()).await;
+    let pcid = data_gathering::pub_chat_id_from_cq(db, cq.clone()).await;
     match pcid {
         Ok(pcid) => Ok(pcid),
         Err(e) => {

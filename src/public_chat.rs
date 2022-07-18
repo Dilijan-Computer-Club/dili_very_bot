@@ -27,6 +27,15 @@ impl PublicChat {
         }
     }
 
+    pub fn remove_user(&mut self, uid: UserId) {
+        for (ii, id) in self.members.iter().enumerate() {
+            if *id == uid {
+                self.members.remove(ii);
+                break;
+            }
+        }
+    }
+
     pub fn has_user(&self, uid: UserId) -> bool {
         self.members.iter().any(|u| *u == uid)
     }

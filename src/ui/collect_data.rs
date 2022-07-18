@@ -1,5 +1,6 @@
 use crate::db::Db;
 use crate::ui::HandlerResult;
+use crate::data_gathering;
 use teloxide::{
     prelude::*,
     types::UpdateKind,
@@ -8,7 +9,7 @@ async fn collect_data_from_msg(
     mut db: Db,
     msg: Message,
 ) -> HandlerResult {
-    db.collect_data_from_msg(msg).await?;
+    data_gathering::collect_data_from_msg(&mut db, msg).await?;
     Ok(())
 }
 
@@ -36,19 +37,19 @@ pub async fn collect_data(
         UpdateKind::Poll(_poll) => Ok(()),
         UpdateKind::PollAnswer(pa) => db.update_user(pa.user).await,
         UpdateKind::MyChatMember(cmu) => {
-            db.update_chat(cmu.chat, Some(cmu.from.clone())).await?;
+            db.update_chat(cmu.chat).await?;
             db.update_user(cmu.from).await?;
             db.update_user(cmu.new_chat_member.user).await?;
             Ok(())
         }
         UpdateKind::ChatMember(cmu) => {
-            db.update_chat(cmu.chat, Some(cmu.from.clone())).await?;
+            db.update_chat(cmu.chat).await?;
             db.update_user(cmu.from).await?;
             db.update_user(cmu.new_chat_member.user).await?;
             Ok(())
         }
         UpdateKind::ChatJoinRequest(cjr) => {
-            db.update_chat(cjr.chat, Some(cjr.from.clone())).await?;
+            db.update_chat(cjr.chat).await?;
             db.update_user(cjr.from).await?;
             Ok(())
         }

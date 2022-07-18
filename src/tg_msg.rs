@@ -1,8 +1,10 @@
 use teloxide::prelude::*;
+use serde::{Serialize, Deserialize};
 
 use crate::error::Error;
 
-#[derive(Clone, Debug)]
+/// TODO Probably don't need it
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TgMsg {
     pub chat_id: ChatId,
     pub message_id: i32,

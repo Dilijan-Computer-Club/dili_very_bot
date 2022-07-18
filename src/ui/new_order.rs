@@ -10,12 +10,12 @@ use std::num::ParseIntError;
 use std::num::IntErrorKind;
 use crate::error::Error;
 use crate::MyDialogue;
-
-
+use crate::data_gathering;
+use serde::{Serialize, Deserialize};
 
 type HandlerResult = Result<(), Error>;
 
-#[derive(Clone, Default, Debug)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub enum State {
     #[default]
     Start, // receive name
@@ -149,7 +149,7 @@ async fn receive_urgency(
     let uid = q.from.id;
 
     // Just for testing
-    let order = Order {
+    let mut order = Order {
         id: None,
         desc_msg: crate::tg_msg::TgMsg {
             chat_id: ChatId(0),
@@ -170,9 +170,17 @@ async fn receive_urgency(
     let pub_chats = db.user_public_chats(uid).await?;
     // TODO handle 0 pub chats too
 
+    if pub_chats.is_empty() {
+        log::warn!("User {uid} is not in any pub chat");
+        bot.send_message(dialogue.chat_id(),
+            "TODO: I don't see you in any public chats").await?;
+        exit_dialogue(dialogue).await?;
+        return Ok(())
+    }
+
     if pub_chats.len() == 1 {
-        let pcid = pub_chats[0].chat.id;
-        let oid = db.add_order(pcid, &order).await?;
+        let pcid = pub_chats[0].0;
+        let oid = db.add_order(pcid, &mut order).await?;
         let mut order = order;
         order.id = Some(oid);
 
@@ -183,9 +191,11 @@ before other people can see it")).await?;
         return Ok(())
     }
 
-    // have multiple pub chats
-    todo!("Support multiple pub chats");
-    // Ok(())
+    bot.send_message(dialogue.chat_id(),
+        format!("You're in multiple public chats {} and we don't support it yet", pub_chats.len())).await?;
+    log::warn!("TODO: Support multiple pub chats uid = {uid}");
+
+    Ok(())
 }
 
 async fn change_state(dialogue: MyDialogue, state: State) -> HandlerResult {
@@ -205,7 +215,7 @@ async fn get_pcid(
     db: &mut Db,
     msg: &Message,
 ) -> Result<ChatId, Error> {
-    let pcid = db.pub_chat_id_from_msg(msg.clone()).await;
+    let pcid = data_gathering::pub_chat_id_from_msg(db, msg.clone()).await;
     match pcid {
         Err(e) => {
             log::warn!(" -> recv_desc: Could not get pcid from msg {:?}", &msg);
