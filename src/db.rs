@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 use crate::error::Error;
 use crate::order::{self, Order, OrderId, Action, ActionKind, Status};
 use crate::order::ActionError;
+use crate::public_chat::PublicChat;
 
 #[derive(Clone, Copy, Debug)]
 pub enum PubChatFromMsgError {
@@ -51,6 +52,21 @@ impl Db {
         Db { db: Arc::new(RwLock::new(InnerDb::default())) }
     }
 
+    pub async fn user_public_chats(
+        &self,
+        uid: UserId,
+    ) -> Result<Vec<PublicChat>, Error> {
+        let db = self.db.clone();
+        spawn_blocking(move || {
+            let mut db = db.write().map_err(|e| format!("lock: {e:?}"))?;
+            Ok(db.public_chats.iter()
+                .filter(|pc| pc.has_user(uid))
+                .cloned()
+                .collect())
+        }).await.map_err(|e| format!("{e:?}").into()).flatten()
+    }
+
+    /// Returns new order's `OrderId`
     pub async fn add_order(
         &mut self,
         pcid: ChatId,
@@ -80,6 +96,7 @@ impl Db {
         }).await.map_err(|e| format!("{e:?}").into()).flatten()
     }
 
+    // TODO remove
     pub async fn pub_chat_id_from_msg(
         &self,
         msg: Message,
@@ -241,33 +258,6 @@ impl Db {
             db.update_chat(chat, user.as_ref());
             Ok(())
         }).await.map_err(|e| format!("{e:?}").into()).flatten()
-    }
-}
-
-#[derive(Clone, Debug)]
-struct PublicChat {
-    chat: Chat,
-    members: Vec<UserId>,
-    orders: Vec<Order>,
-}
-
-impl PublicChat {
-    fn new(chat: Chat) -> PublicChat {
-        PublicChat {
-            chat,
-            members: Vec::new(),
-            orders: Vec::new(),
-        }
-    }
-
-    fn add_user(&mut self, uid: UserId) {
-        log::debug!("-> add_user uid {uid} to chat {}",
-                    self.chat.title().unwrap_or("<noname>"));
-        if ! self.members.iter_mut().any(|id| *id == uid) {
-            log::debug!("adding uid {uid} to chat {}",
-                        self.chat.title().unwrap_or("<noname>"));
-            self.members.push(uid);
-        }
     }
 }
 

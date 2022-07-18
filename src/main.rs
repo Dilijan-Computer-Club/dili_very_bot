@@ -15,10 +15,15 @@ mod utils;
 mod urgency;
 mod markup;
 mod ui;
+mod public_chat;
 
 use db::Db;
 use crate::error::Error;
 use crate::ui::{State, MyDialogue, MyStorage, HandlerResult};
+
+pub type Offset = chrono::offset::Utc;
+pub type DateTime = chrono::DateTime<Offset>;
+
 
 fn init_bot() -> Result<Bot, Error> {
     use std::io::Read;
@@ -31,8 +36,8 @@ fn init_bot() -> Result<Bot, Error> {
 /// A filter for that dptree thing that collects data that we might need later
 /// it's a filter because I don't know another way to handle all events
 /// and passing them to other handlers
-async fn collect_data_handler(db: Db, update: Update) -> bool {
-    log::info!("Collecting data...");
+async fn collect_data_handler(db: Db, update: Update, state: State) -> bool {
+    log::info!("Collecting data... \nstate = {state:?}");
     let _ = ui::collect_data(db, update).await;
     false
 }
@@ -139,10 +144,10 @@ pub fn schema() -> UpdateHandler<Error> {
 
     dialogue::enter::<Update, MyStorage, State, _>()
         .branch(dptree::filter_async(collect_data_handler))
-        .branch(message_handler)
-        .branch(callback_query_handler)
         .branch(dptree::case![State::NewOrder(no)]
                 .branch(ui::new_order::schema()))
+        .branch(message_handler)
+        .branch(callback_query_handler)
         .branch(dptree::entry())
 }
 

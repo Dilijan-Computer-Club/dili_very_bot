@@ -20,6 +20,7 @@ pub use list_active_orders::list_active_orders;
 pub mod commands;
 pub mod order;
 pub mod order_action;
+pub mod urgency;
 
 
 use crate::error::Error;

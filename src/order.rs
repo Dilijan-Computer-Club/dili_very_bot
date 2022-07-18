@@ -15,9 +15,8 @@ pub use action::Action;
 pub use action_kind::ActionKind;
 pub use action_error::ActionError;
 use crate::utils::dumb_intersection;
-
-type Offset = chrono::offset::Utc;
-type DateTime = chrono::DateTime<Offset>;
+use crate::Offset;
+use crate::DateTime;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(transparent)]
@@ -82,7 +81,7 @@ impl Order {
             canceled_at: None,
             delivered: None,
             published_at: None,
-            urgency: Urgency::Whatever,
+            urgency: Urgency::Whenever,
             desc_msg: msg,
             from: from.clone(),
             assigned: None,
@@ -243,7 +242,7 @@ mod tests {
             canceled_at: None,
             delivered: None,
             published_at: None,
-            urgency: Urgency::Whatever,
+            urgency: Urgency::Whenever,
             desc_msg: msg,
             from: from.clone(),
             assigned: None,
