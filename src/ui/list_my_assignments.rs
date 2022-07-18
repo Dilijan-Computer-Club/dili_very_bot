@@ -25,7 +25,7 @@ pub async fn list_my_assignments(
         let msg: Option<&str> = None;
         for order in orders.iter() {
             ui::order::send_message(
-                &order, &mut bot, uid, chat.id, msg).await?;
+                order, &mut bot, uid, chat.id, msg).await?;
         }
     }
     Ok(())

@@ -26,7 +26,7 @@ pub async fn show_my_orders(
         };
         let msg: Option<&str> = None;
         for order in orders.iter() {
-            ui::order::send_message(&order, &mut bot, uid, chat.id, msg).await?;
+            ui::order::send_message(order, &mut bot, uid, chat.id, msg).await?;
         }
     }
     dialogue.update(State::Start).await?;
