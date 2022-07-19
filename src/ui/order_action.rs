@@ -56,7 +56,7 @@ pub async fn handle_order_action(
                 pcid, &order).await?;
         },
         order::Status::MarkedAsDelivered => {
-            // Send message to the chat
+            // Send message to the chat in which it was marked as delivered
             bot.send_message(dialogue.chat_id(),
             "Order is marked as delivered. It will be closed after \
 the publisher confirms they've received it.").await?;
