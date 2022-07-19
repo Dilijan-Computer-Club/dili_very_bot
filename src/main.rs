@@ -17,6 +17,7 @@ mod urgency;
 mod markup;
 mod ui;
 mod data_gathering;
+mod logger;
 
 use db::Db;
 use crate::error::Error;
@@ -145,7 +146,7 @@ pub fn schema() -> UpdateHandler<Error> {
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    pretty_env_logger::init();
+    logger::init();
     log::info!("Starting bot...");
 
     let db = Db::new().await?;
@@ -158,8 +159,7 @@ async fn main() -> Result<(), Error> {
             .await?.erase();
     Dispatcher::builder(bot, schema())
         .dependencies(dptree::deps![storage, db])
-        .build()
-        .setup_ctrlc_handler()
+        .build()//  .setup_ctrlc_handler()
         .dispatch()
         .await;
 
