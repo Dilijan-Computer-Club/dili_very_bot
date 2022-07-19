@@ -4,19 +4,53 @@ use teloxide::{
 };
 
 use crate::error::Error;
-use crate::order::{Order, Action};
-use crate::markup;
+use crate::order::{Order, Action, Status};
+use crate::markup::{self, time_ago};
+
+fn format_status(order: &Order) -> String {
+    match order.status() {
+        Status::Unpublished => "Not published".to_string(),
+        Status::Published =>
+            format!("Published {}", time_ago(order.published_at.unwrap())),
+        Status::Assigned => {
+            let (when, _id, who) = order.assigned.as_ref().unwrap();
+            let when = time_ago(*when);
+            let to_whom = if let Some(user) = who {
+                format!(" to {} ", markup::user_link(&user))
+            } else {
+                "".to_string()
+            };
+
+            format!("Assigned {to_whom}{when}")
+        },
+        Status::MarkedAsDelivered => {
+            let (_uid, _u, when) = order.delivered.as_ref().unwrap();
+            format!("Marked as deliered {}", time_ago(*when))
+        },
+        Status::DeliveryConfirmed => {
+            let when = order.delivery_confirmed_at.unwrap();
+            format!("Delivered {}", time_ago(when))
+        }
+    }
+}
 
 fn format(order: &Order) -> String {
     let description = markup::escape_html(&order.desc_msg.text);
-    let status = order.status();
+    let status = format_status(order);
     let user_link = markup::user_link(&order.from);
+
+    let price = markup::format_amd(order.price_in_drams);
+    let urgency = format!("Needed {}", order.urgency.name());
 
     let text = format!("\
 {user_link}
+
 {status}
 
-{description}");
+{description}
+
+{price}  {urgency}
+");
     text
 }
 
