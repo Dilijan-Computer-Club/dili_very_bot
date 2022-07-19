@@ -157,6 +157,7 @@ impl Order {
 
         match action.kind {
             ActionKind::Publish => {
+                self.canceled_at = None;
                 self.published_at = Some(Offset::now());
             },
             ActionKind::Cancel => {

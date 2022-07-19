@@ -315,6 +315,7 @@ insteadd of {}", names.len(), pub_chats.len()).into());
         } else {
             let mut order = order;
             let prev_status = order.perform_action(uid, &action)?;
+                log::warn!("redis perform_action {uid} {pcid} : {prev_status} => {}", order.status());
             let res = self.update_order(pcid, &order)
                 .await;
             if let Err(e) = res {
