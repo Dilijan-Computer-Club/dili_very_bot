@@ -10,10 +10,16 @@ jobs:
             toolchain: nightly
             components: clippy
             override: true
+      # We can pick one of the flags but not both and not none,
+      # so check them separately
       - uses: actions-rs/clippy-check@v1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          args: --all-features
+          args: --no-default-features --features redis_db
+      - uses: actions-rs/clippy-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --no-default-features --features mem_db
   build:
     name: build
     runs-on: ubuntu-latest
@@ -32,6 +38,12 @@ jobs:
         with:
           toolchain: nightly
           command: test
+      - name: test with mem_db
+        uses: actions-rs/cargo@v1
+        with:
+          toolchain: nightly
+          command: test
+          args: --no-default-features --features mem_db
       - name: build release binary
         uses: actions-rs/cargo@v1
         if: startsWith(github.ref, 'refs/tags/')
