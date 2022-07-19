@@ -37,7 +37,8 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         with:
           toolchain: nightly
-          command: build --release
+          command: build
+          args: --release
       - name: publish binary
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
