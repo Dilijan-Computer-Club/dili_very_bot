@@ -873,7 +873,6 @@ dependencies = [
  "itoa 0.4.8",
  "percent-encoding",
  "pin-project-lite",
- "sha1",
  "tokio",
  "tokio-util 0.6.10",
  "url",

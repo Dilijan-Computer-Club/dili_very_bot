@@ -1,11 +1,12 @@
 use teloxide::{
     prelude::*,
-    types::{InlineKeyboardButton, InlineKeyboardMarkup}
+    types::{InlineKeyboardButton, InlineKeyboardMarkup, MessageId}
 };
 
 use crate::error::Error;
 use crate::order::{Order, Action, Status};
 use crate::markup::{self, time_ago};
+use crate::Db;
 
 fn format_status(order: &Order) -> String {
     match order.status() {
@@ -64,6 +65,7 @@ fn format(order: &Order) -> String {
 /// prefix: Prepend the order itself with this text
 ///         Note that it is rendered as HTML
 pub async fn send_message<S: AsRef<str>>(
+    mut db: Db,
     order: &Order,
     bot: AutoSend<Bot>,
     for_uid: Option<UserId>,
@@ -90,8 +92,10 @@ pub async fn send_message<S: AsRef<str>>(
         .collect();
     let buttons = actions_keyboard_markup(&actions);
     let bot = bot.parse_mode(teloxide::types::ParseMode::Html);
-    bot.send_message(to_chat_id, text)
+    let msg: Message = bot.send_message(to_chat_id, text)
         .reply_markup(buttons).await?;
+    let msg_id = MessageId { message_id: msg.id };
+    db.add_msg_id(order_id, to_chat_id, msg_id).await?;
     Ok(())
 }
 

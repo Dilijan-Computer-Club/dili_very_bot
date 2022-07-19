@@ -7,14 +7,14 @@ use teloxide::{
 
 pub async fn show_my_orders(
     bot: AutoSend<Bot>,
-    mut db: Db,
+    db: Db,
     pcid: ChatId,
     chat: &Chat,
     uid: UserId,
     dialogue: MyDialogue
 ) -> HandlerResult {
     log::info!("-> show_my_orders");
-    let orders = db.orders_submitted_by_user(pcid, uid).await?;
+    let orders = db.clone().orders_submitted_by_user(pcid, uid).await?;
     if orders.is_empty() {
         bot.send_message(dialogue.chat_id(), "You have no current orders")
             .await?;
@@ -27,7 +27,7 @@ pub async fn show_my_orders(
         let msg: Option<&str> = None;
         for order in orders.iter() {
             ui::order::send_message(
-                order, bot.clone(), uid, chat.id, msg).await?;
+                db.clone(), order, bot.clone(), uid, chat.id, msg).await?;
         }
     }
     dialogue.update(State::Start).await?;

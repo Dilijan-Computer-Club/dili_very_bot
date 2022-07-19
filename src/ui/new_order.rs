@@ -184,7 +184,8 @@ async fn receive_urgency(
         let mut order = order;
         order.id = Some(oid);
 
-        ui::order::send_message(&order, bot.clone(), Some(uid), dialogue.chat_id(),
+        ui::order::send_message(db, &order, bot.clone(),
+            Some(uid), dialogue.chat_id(),
             Some("New Order is created! You need to publish it \
 before other people can see it")).await?;
         exit_dialogue(dialogue).await?;

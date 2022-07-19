@@ -5,14 +5,15 @@ use crate::order;
 
 pub async fn list_active_orders(
     bot: AutoSend<Bot>,
-    mut db: Db,
+    db: Db,
     pcid: ChatId,
     chat: &Chat,
     uid: UserId,
     dialogue: MyDialogue
 ) -> HandlerResult {
     log::info!("-> list_active_orders");
-    let orders = db.orders_by_status(pcid, order::Status::Published).await?;
+    let orders = db.clone()
+        .orders_by_status(pcid, order::Status::Published).await?;
     if orders.is_empty() {
         bot.send_message(dialogue.chat_id(), "No orders")
             .await?;
@@ -25,7 +26,7 @@ pub async fn list_active_orders(
         let msg: Option<&str> = None;
         for order in orders.iter() {
             ui::order::send_message(
-                order, bot.clone(), uid, chat.id, msg).await?;
+                db.clone(), order, bot.clone(), uid, chat.id, msg).await?;
         }
     }
     Ok(())

@@ -1,7 +1,7 @@
 #![cfg(feature = "redis_db")]
 
 use teloxide::prelude::*;
-use teloxide::types::{User, Chat};
+use teloxide::types::{User, Chat, MessageId};
 use redis;
 use crate::error::Error;
 use crate::order::{self, Order, OrderId, Action, ActionKind,
@@ -24,6 +24,7 @@ fn to_err(e: redis::RedisError) -> Error {
 ///   user:id:public_chats  Set<ChatId>
 ///   pub_chat:id:orders    Set<OrderId>
 ///   pub_chat:id:order:id  SerializedData
+///   order_msgs:id         Set<(ChatId, MessageId)>
 #[derive(Clone)]
 pub struct Db {
     c: redis::aio::ConnectionManager,
@@ -47,7 +48,7 @@ impl Db {
         &mut self,
         uid: UserId,
     ) -> Result<Vec<(ChatId, String)>, Error> {
-        log::debug!("redis user_public_chats");
+        log::debug!("user_public_chats");
 
         let pub_chats: Vec<i64> =
             redis::Cmd::smembers(user_pub_chats_key(uid))
@@ -60,7 +61,7 @@ impl Db {
         let keys: Vec<String> =
             pub_chats.iter().map(|pc| pub_chat_name_key(ChatId(*pc)))
             .collect();
-        log::debug!("redis pub chat keys {keys:?}");
+        log::debug!("pub chat keys {keys:?}");
         let mut names: Vec<String> = Vec::new();
         if keys.len() == 1 {
             let name: String = redis::Cmd::get(&keys[0])
@@ -85,7 +86,7 @@ insteadd of {}", names.len(), pub_chats.len()).into());
         pcid: ChatId,
         order: &mut Order
     ) -> Result<OrderId, Error> {
-        log::debug!("redis add_order {pcid} {:?}", order.id);
+        log::debug!("add_order {pcid} {:?}", order.id);
 
         // It's not a data race, is it?
         let oid: u64 = redis::Cmd::incr(num_orders_key(), 1)
@@ -102,8 +103,9 @@ insteadd of {}", names.len(), pub_chats.len()).into());
         Ok(oid)
     }
 
+    /// Returns some debugging info
     pub async fn debug_stats(&mut self) -> Result<String, Error> {
-        log::debug!("redis debug_stats");
+        log::debug!("debug_stats");
 
         let mut ret = String::new();
         let num_orders: u64 =
@@ -131,7 +133,7 @@ insteadd of {}", names.len(), pub_chats.len()).into());
         &mut self,
         uid: UserId
     ) -> Result<Option<User>, Error> {
-        log::debug!("redis get_user {uid}");
+        log::debug!("get_user {uid}");
 
         let bytes: Vec<u8> = redis::Cmd::get(user_key(uid))
             .query_async(&mut self.c)
@@ -143,11 +145,12 @@ insteadd of {}", names.len(), pub_chats.len()).into());
         Ok(Some(user))
     }
 
+    /// Updates the user in the database
     pub async fn update_user(
         &mut self,
         user: User,
     ) -> Result<(), Error> {
-        log::debug!("redis update_user {:?}", user.id);
+        log::debug!("update_user {:?}", user.id);
 
         redis::pipe()
             .atomic()
@@ -157,15 +160,16 @@ insteadd of {}", names.len(), pub_chats.len()).into());
         Ok(())
     }
 
+    /// Add new member to public chat
     pub async fn add_members(
         &mut self,
         cid: ChatId,
         uids: Vec<UserId>, // can it be a slice instead?
     ) -> Result<(), Error> {
-        log::debug!("redis add_members {cid} {uids:?}");
+        log::debug!("add_members {cid} {uids:?}");
 
         if cid.is_user() {
-            log::warn!("redis add_members trying add members \
+            log::warn!("add_members trying add members \
 to private chat {cid} {uids:?}");
         }
 
@@ -178,22 +182,24 @@ to private chat {cid} {uids:?}");
         pipe.query_async(&mut self.c).await.map_err(to_err)
     }
 
+    /// Remove user from chat
     pub async fn remove_chat_membership(
         &mut self,
         cid: ChatId,
         uid: UserId,
     ) -> Result<(), Error> {
-        log::debug!("redis remove_chat_membership {cid} {uid}");
+        log::debug!("remove_chat_membership {cid} {uid}");
 
         redis::Cmd::srem(pub_chat_members_key(cid), uid.0)
             .query_async(&mut self.c).await.map_err(to_err)
     }
 
+    /// Return all orders in a public chat
     async fn pub_chat_orders(
         &mut self,
         pcid: ChatId,
     ) -> Result<Vec<Order>, Error> {
-        log::debug!("redis pub_chat_orders {pcid}");
+        log::debug!("pub_chat_orders {pcid}");
 
         let oids: Vec<u64> =
             redis::Cmd::smembers(pub_chat_orders_key(pcid))
@@ -217,12 +223,13 @@ to private chat {cid} {uids:?}");
         Ok(orders)
     }
 
+    /// Return orders in the chat, filtered by `status`
     pub async fn orders_by_status(
         &mut self,
         pcid: ChatId,
         status: Status,
     ) -> Result<Vec<Order>, Error> {
-        log::debug!("redis orders_by_status {pcid} {status:?}");
+        log::debug!("orders_by_status {pcid} {status:?}");
 
         // TODO optimize it later
         let orders = self.pub_chat_orders(pcid).await?;
@@ -232,12 +239,13 @@ to private chat {cid} {uids:?}");
         Ok(orders)
     }
 
+    /// Return orders in `pcid` assigned to `uid`
     pub async fn active_assignments_to(
         &mut self,
         pcid: ChatId,
         uid: UserId
     ) -> Result<Vec<Order>, Error> {
-        log::debug!("redis active_assignments_to {pcid} {uid:?}");
+        log::debug!("active_assignments_to {pcid} {uid:?}");
         // TODO optimize later
 
         let orders = self.pub_chat_orders(pcid).await?;
@@ -252,12 +260,13 @@ to private chat {cid} {uids:?}");
         }).collect())
     }
 
+    /// Return orders in `pcid` that are assigned to `uid`
     pub async fn orders_submitted_by_user(
         &mut self,
         pcid: ChatId,
         uid: UserId
     ) -> Result<Vec<Order>, Error> {
-        log::debug!("redis ordes_submitted_by_user {pcid} {uid:?}");
+        log::debug!("ordes_submitted_by_user {pcid} {uid:?}");
 
         let oids: Vec<u64> =
             redis::Cmd::sinter(
@@ -301,7 +310,7 @@ to private chat {cid} {uids:?}");
         action: Action,
     ) -> Result<(order::Status, Option<Order>), ActionError> {
         let uid = user.id;
-        log::debug!("redis perform_action {uid} {pcid} {action:?}");
+        log::debug!("perform_action {uid} {pcid} {action:?}");
 
         let order: Option<Order> =
             self.get_order(pcid, action.order_id)
@@ -318,18 +327,18 @@ to private chat {cid} {uids:?}");
             let res = self.delete_order_unchecked(
                 pcid, order.from.id, action.order_id).await;
             if let Err(e) = res {
-                log::warn!("redis perform_action {uid} {pcid} : {e:?}");
+                log::warn!("perform_action {uid} {pcid} : {e:?}");
                 return Err(ActionError::Other);
             }
             Ok((order.status(), None))
         } else {
             let mut order = order;
             let prev_status = order.perform_action(user, &action)?;
-                log::warn!("redis perform_action {uid} {pcid} : {prev_status} => {}", order.status());
+                log::warn!("perform_action {uid} {pcid} : {prev_status} => {}", order.status());
             let res = self.update_order(pcid, &order)
                 .await;
             if let Err(e) = res {
-                log::warn!("redis perform_action {uid} {pcid} : {e:?}");
+                log::warn!("perform_action {uid} {pcid} : {e:?}");
                 return Err(ActionError::Other);
             }
             Ok((prev_status, Some(order)))
@@ -348,10 +357,12 @@ to private chat {cid} {uids:?}");
             .del(pub_chat_order_key(pcid, oid))
             .srem(pub_chat_orders_key(pcid), oid.0)
             .srem(user_orders_key(uid), oid.0)
+            .del(order_msgs_key(oid))
             .query_async(&mut self.c).await.map_err(to_err)?;
         Ok(())
     }
 
+    /// Get data of order that's in `pcid`
     async fn get_order(
         &mut self,
         pcid: ChatId,
@@ -368,6 +379,7 @@ to private chat {cid} {uids:?}");
         Ok(Some(order))
     }
 
+    /// Update order data in the database
     async fn update_order(
         &mut self,
         pcid: ChatId,
@@ -384,18 +396,59 @@ to private chat {cid} {uids:?}");
         Ok(())
     }
 
+    /// Update chat data in the database
     pub async fn update_chat(
         &mut self,
         chat: Chat,
     ) -> Result<(), Error> {
         let title = chat.title().unwrap_or("");
-        log::debug!("redis update_chat \"{title}\" {chat:?}");
+        log::debug!("update_chat \"{title}\" {chat:?}");
 
         redis::pipe()
             .sadd(pub_chats_key(), chat.id.0)
             .set(pub_chat_key(chat.id), serde_json::to_vec(&chat)?)
             .set(pub_chat_name_key(chat.id), title)
             .query_async(&mut self.c).await.map_err(to_err)
+    }
+
+    /// Get which messages we've sent that contain this order
+    ///
+    /// Returns pairs of (chat_id, order_id) because we need `chat_id` to
+    /// change or delete these messages
+    pub async fn order_msg_ids(
+        &mut self,
+        oid: OrderId,
+    ) -> Result<Vec<(ChatId, MessageId)>, Error> {
+        log::debug!("order_msg_id {oid:?}");
+        let data_items: Vec<Vec<u8>> =
+            redis::Cmd::smembers(order_msgs_key(oid))
+            .query_async(&mut self.c).await?;
+
+        let mut cid_mids: Vec<(ChatId, MessageId)> =
+            Vec::with_capacity(data_items.len());
+        for data in data_items.into_iter() {
+            let (cid, mid) = serde_json::from_slice(&data)?;
+            cid_mids.push((cid, MessageId { message_id: mid }));
+        }
+
+        Ok(cid_mids)
+    }
+
+    /// Record new message id, so we can later see it returned
+    /// from `order_msg_ids`
+    pub async fn add_msg_id(
+        &mut self,
+        oid: OrderId,
+        cid: ChatId,
+        mid: MessageId,
+    ) -> Result<(), Error> {
+        let pair = (cid, mid.message_id);
+        let data: Vec<u8> =
+            serde_json::to_vec(&pair)?;
+        redis::Cmd::sadd(order_msgs_key(oid), data)
+            .query_async(&mut self.c).await.map_err(to_err)?;
+
+        Ok(())
     }
 }
 
@@ -452,5 +505,9 @@ fn pub_chat_orders_key(pc: ChatId) -> String {
 fn pub_chat_order_key(pc: ChatId, oid: OrderId) -> String {
     let k = pub_chat_key(pc);
     format!("{k}:order:{oid}")
+}
+
+fn order_msgs_key(oid: OrderId) -> String {
+    key(&format!("order_msgs:{oid}"))
 }
 

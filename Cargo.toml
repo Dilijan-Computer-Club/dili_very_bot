@@ -22,4 +22,5 @@ serde_json = "1.0.82"
 [dependencies.redis]
 version = "0.21.5"
 features = ["aio", "connection-manager", "tokio-comp"]
+default-features = false
 optional = true

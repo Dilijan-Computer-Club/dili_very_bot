@@ -1,8 +1,8 @@
 use teloxide::{
     prelude::*,
-    types::User,
+    types::{User, MessageId},
 };
-use crate::order::{self, Order};
+use crate::order::{self, Order, OrderId, ActionKind};
 use crate::Db;
 use crate::error::Error;
 use crate::ui::{self, MyDialogue};
@@ -69,6 +69,22 @@ async fn handle_order_action(
 ) -> Result<bool, Error> {
     let uid = user.id;
     let action_type = action.kind;
+    let oid: OrderId = action.order_id;
+
+    // Special case for order deletion because we need to also try to delete
+    // all messages where we posted this order
+    // (or should we mark them as deleted somehow?
+    if let ActionKind::Delete = action_type {
+        let msgs: Vec<(ChatId, MessageId)> =
+            db.order_msg_ids(oid).await?;
+
+        for (cid, mid) in msgs.into_iter() {
+            if let Err(e) = bot.delete_message(cid, mid.message_id).await {
+                log::warn!("could not delete order message ({cid}, {mid:?}): {e:?}")
+            }
+        }
+    }
+
     let res = db.perform_action(user, pcid, action).await;
     log::info!("db.perform_action => {res:?}");
     if let Err(e) = res {
@@ -95,7 +111,7 @@ async fn handle_order_action(
         },
         order::Status::Published => {
             order_published_notifications(
-                bot, dialogue.chat_id(), pcid, &order).await?;
+                db.clone(), bot, dialogue.chat_id(), pcid, &order).await?;
         },
         order::Status::Assigned => {
             order_assigned_notifications(
@@ -109,18 +125,18 @@ async fn handle_order_action(
 the publisher confirms they've received it.").await?;
 
             // Send message to the owner asking to confirm delivery
-            let assignee_link = get_assignee_link(db, &order).await?;
+            let assignee_link = get_assignee_link(db.clone(), &order).await?;
             let msg = format!("{assignee_link} marked order as delivered. \
 Please confirm it.");
 
             let priv_chat_id: ChatId = ChatId(order.from.id.0 as i64);
             ui::order::send_message(
-                &order, bot, Some(uid), priv_chat_id, Some(msg)).await?;
+                db, &order, bot, Some(uid), priv_chat_id, Some(msg)).await?;
 
 
         },
         order::Status::DeliveryConfirmed => {
-            delivery_confirmed_notifications(bot, &order).await?;
+            delivery_confirmed_notifications(db, bot, &order).await?;
         },
     }
 
@@ -133,6 +149,7 @@ Please confirm it.");
 }
 
 pub async fn order_published_notifications(
+    db: Db,
     bot: AutoSend<Bot>,
     chat_id: ChatId,
     pcid: ChatId,
@@ -152,12 +169,12 @@ pub async fn order_published_notifications(
         };
 
         ui::order::send_message(
-            order, bot.clone(), uid, chat_id,
+            db.clone(), order, bot.clone(), uid, chat_id,
             Some("New order is published")).await?;
     }
 
     // Send notification to public chat
-    ui::order::send_message(order, bot, None, pcid,
+    ui::order::send_message(db, order, bot, None, pcid,
                             Some("New order is published")).await?;
 
     Ok(())
@@ -169,7 +186,7 @@ pub async fn order_assigned_notifications(
     pcid: ChatId,
     order: &Order,
 ) -> Result<(), Error> {
-    let assignee_link = get_assignee_link(db, order).await?;
+    let assignee_link = get_assignee_link(db.clone(), order).await?;
 
     // Send a private message to the order owner
     {
@@ -177,12 +194,13 @@ pub async fn order_assigned_notifications(
 
         let priv_chat_id: ChatId = uid.into();
         ui::order::send_message(
-            order, bot.clone(), Some(uid), priv_chat_id, Some(msg)).await?;
+            db.clone(), order, bot.clone(), Some(uid),
+            priv_chat_id, Some(msg)).await?;
 
         // Send a public message sayng the order is taken
         let msg = format!("Order is taken by {assignee_link}");
         ui::order::send_message(
-            order, bot.clone(), None, pcid, Some(msg)).await?;
+            db.clone(), order, bot.clone(), None, pcid, Some(msg)).await?;
     }
 
     // Send message to the owner
@@ -193,13 +211,14 @@ pub async fn order_assigned_notifications(
         let msg = format!("Congrats! {assignee_link} has agreed to deliver \
 your order! Feel free to send them a message.");
         ui::order::send_message(
-            order, bot, Some(owner_uid), owner_cid, Some(msg)).await?;
+            db, order, bot, Some(owner_uid), owner_cid, Some(msg)).await?;
     }
 
     Ok(())
 }
 
 pub async fn delivery_confirmed_notifications(
+    db: Db,
     bot: AutoSend<Bot>,
     order: &Order,
 ) -> Result<(), Error> {
@@ -207,13 +226,13 @@ pub async fn delivery_confirmed_notifications(
     let assignee_id = order.assigned.as_ref().unwrap().1;
     let assignee_cid = utils::uid_to_cid(assignee_id);
     ui::order::send_message(
-        order, bot.clone(), Some(assignee_id), assignee_cid,
+        db.clone(), order, bot.clone(), Some(assignee_id), assignee_cid,
         Some("Order delivery is confirmed! Thank you!")).await?;
     // Send message to the owner
     let owner_id = order.from.id;
     let owner_cid = utils::uid_to_cid(owner_id);
     ui::order::send_message(
-        order, bot, Some(owner_id), owner_cid,
+        db, order, bot, Some(owner_id), owner_cid,
         Some("Order delivery is confirmed!")).await?;
     Ok(())
 }
