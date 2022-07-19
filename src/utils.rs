@@ -9,11 +9,10 @@ pub fn dumb_intersection<T: Clone + PartialEq>(aa: &[T], bb: &[T]) -> Vec<T> {
 }
 
 use teloxide::types::{ChatId, UserId};
-pub fn uid_to_cid(uid: UserId) -> Option<ChatId> {
+pub fn uid_to_cid(uid: UserId) -> ChatId {
     let cid = ChatId(uid.0 as i64);
-    if cid.is_user() {
-        Some(cid)
-    } else {
-        None
+    if ! cid.is_user() {
+        panic!("Chat_id is not user after converting from chat_id")
     }
+    cid
 }

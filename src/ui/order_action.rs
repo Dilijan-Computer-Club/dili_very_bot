@@ -142,11 +142,6 @@ pub async fn order_assigned_notifications(
     {
         let owner_uid = order.from.id;
         let owner_cid = utils::uid_to_cid(owner_uid);
-        if owner_cid.is_none() {
-            log::warn!("Order ({:?}) owner ({owner_cid:?}) \
-could not be converted to priv chat????", order.id);
-        }
-        let owner_cid = owner_cid.unwrap();
 
         let msg = format!("Congrats! {assignee_link} has agreed to deliver \
 your order! Feel free to send them a message.");
@@ -164,21 +159,15 @@ pub async fn delivery_confirmed_notifications(
     // Send message to the assignee
     let assignee_id = order.assigned.as_ref().unwrap().1;
     let assignee_cid = utils::uid_to_cid(assignee_id);
-    if let Some(assignee_cid) = assignee_cid {
-        ui::order::send_message(
-            order, bot.clone(), Some(assignee_id), assignee_cid,
-            Some("Order delivery is confirmed! Thank you!")).await?;
-    } else {
-        log::warn!("Assignee {assignee_id} is not user???");
-    }
+    ui::order::send_message(
+        order, bot.clone(), Some(assignee_id), assignee_cid,
+        Some("Order delivery is confirmed! Thank you!")).await?;
     // Send message to the owner
     let owner_id = order.from.id;
     let owner_cid = utils::uid_to_cid(owner_id);
-    if let Some(owner_cid) = owner_cid {
-        ui::order::send_message(
-            order, bot, Some(owner_id), owner_cid,
-            Some("Order delivery is confirmed!")).await?;
-    }
+    ui::order::send_message(
+        order, bot, Some(owner_id), owner_cid,
+        Some("Order delivery is confirmed!")).await?;
     Ok(())
 }
 

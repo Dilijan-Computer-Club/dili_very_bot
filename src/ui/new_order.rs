@@ -178,15 +178,17 @@ async fn receive_urgency(
     }
 
     if pub_chats.len() == 1 {
+        let cid = dialogue.chat_id();
         let pcid = pub_chats[0].0;
         let oid = db.add_order(pcid, &mut order).await?;
         let mut order = order;
         order.id = Some(oid);
 
-        ui::order::send_message(&order, bot, Some(uid), dialogue.chat_id(),
+        ui::order::send_message(&order, bot.clone(), Some(uid), dialogue.chat_id(),
             Some("New Order is created! You need to publish it \
 before other people can see it")).await?;
         exit_dialogue(dialogue).await?;
+        ui::main_menu::send_menu_link(bot, cid).await?;
         return Ok(())
     }
 
@@ -206,22 +208,3 @@ async fn exit_dialogue(dialogue: MyDialogue) -> HandlerResult {
     dialogue.update(ui::State::Start).await?;
     Ok(())
 }
-
-// Tries to find pub chat id
-// async fn get_pcid(
-//     bot: AutoSend<Bot>,
-//     dialogue: &MyDialogue,
-//     db: &mut Db,
-//     msg: &Message,
-// ) -> Result<ChatId, Error> {
-//     let pcid = data_gathering::pub_chat_id_from_msg(db, msg.clone()).await;
-//     match pcid {
-//         Err(e) => {
-//             log::warn!(" -> recv_desc: Could not get pcid from msg {:?}", &msg);
-//             bot.send_message(dialogue.chat_id(), format!("{e}")).await?;
-//             Err(format!("{e}").into())
-//         },
-//         Ok(pcid) => Ok(pcid),
-//     }
-// }
-

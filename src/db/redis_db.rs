@@ -164,6 +164,11 @@ insteadd of {}", names.len(), pub_chats.len()).into());
     ) -> Result<(), Error> {
         log::debug!("redis add_members {cid} {uids:?}");
 
+        if cid.is_user() {
+            log::warn!("redis add_members trying add members \
+to private chat {cid} {uids:?}");
+        }
+
         let uids: Vec<u64> = uids.into_iter().map(|u| u.0).collect();
         let mut pipe = redis::pipe();
         for uid in uids.iter() {

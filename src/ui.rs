@@ -22,6 +22,9 @@ pub mod commands;
 pub mod order;
 pub mod order_action;
 pub mod urgency;
+pub mod say_hello;
+pub mod help;
+pub mod me;
 
 
 use std::sync::Arc;

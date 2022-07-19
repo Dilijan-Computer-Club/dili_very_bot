@@ -1,4 +1,4 @@
-use crate::{Db};
+use crate::Db;
 use crate::ui::{self, HandlerResult};
 use teloxide::{
     prelude::*,
@@ -13,8 +13,14 @@ pub enum Command {
     Start,
     #[command(description = "Show main menu")]
     Menu,
-    #[command(description = "Debugging")]
+    #[command(description = "Debugging, this should be deleted")]
     Debug,
+    #[command(description = "Show how to use me")]
+    Help,
+    #[command(description = "Get the bot to know you")]
+    Hello,
+    #[command(description = "What the bot knows about you (mostly debugging)")]
+    Me,
 }
 
 /// Show some debugging info
@@ -36,11 +42,19 @@ pub async fn handle_command(
     command: Command,
     db: Db,
 ) -> HandlerResult {
+    let msg_id = msg.id;
+    let user = msg.from();
+    let cid = msg.chat.id;
     match command {
-        Command::Start => { ui::main_menu::main_menu(bot, msg.chat.id).await? },
-        Command::Menu  => { ui::main_menu::main_menu(bot, msg.chat.id).await? },
-        Command::Debug => { debug_msg(bot, msg, db).await? },
+        Command::Start => { ui::main_menu::main_menu(bot.clone(), cid).await? },
+        Command::Menu  => { ui::main_menu::main_menu(bot.clone(), cid).await? },
+        Command::Debug => { debug_msg(bot.clone(), msg, db).await? },
+        Command::Hello => { ui::say_hello::say_hello(bot.clone(), cid, msg.from()).await? },
+        Command::Help =>  { bot.clone().send_message(cid, ui::help::help()).await?; },
+        Command::Me =>  { ui::me::send_me(bot.clone(), db, cid, user).await?; },
     }
+    // Delete the command message after the command is handled
+    bot.delete_message(cid, msg_id).await?;
     Ok(())
 }
 

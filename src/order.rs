@@ -27,6 +27,14 @@ impl fmt::Display for OrderId {
         write!(f, "{}", self.0)
     }
 }
+// Order
+//
+// We probably want this:
+// - name
+// - price
+// - fee
+// - contact --- tg user
+// - note / description
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Order {

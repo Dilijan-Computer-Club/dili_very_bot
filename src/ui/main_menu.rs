@@ -1,6 +1,7 @@
 use crate::db::Db;
 use crate::ui::{self, HandlerResult, MyDialogue};
 use crate::error::Error;
+use std::time::Duration;
 
 use teloxide::{
     prelude::*,
@@ -117,6 +118,23 @@ trying to handle ShowMyOrders q = {q:?}");
 
 }
 
+const TEMP_MENU_LINK_TIMEOUT: Duration = Duration::from_millis(60_000);
+
+pub async fn send_menu_link(
+    bot: AutoSend<Bot>,
+    cid: ChatId,
+) -> HandlerResult {
+    log::debug!("send_menu_link");
+    let msg: Message = bot.send_message(cid, "Open menu like this: /menu").await?;
+    let msg_id = msg.id;
+    tokio::spawn(async move {
+        log::debug!("send_menu_link deleting the link");
+        tokio::time::sleep(TEMP_MENU_LINK_TIMEOUT).await;
+        let _ = bot.delete_message(cid, msg_id).await;
+    });
+    Ok(())
+}
+
 pub async fn handle_item(
     bot: AutoSend<Bot>,
     q: &CallbackQuery,
@@ -136,25 +154,27 @@ pub async fn handle_item(
             dialogue.update(
                 ui::State::NewOrder(ui::new_order::State::default())).await?;
             ui::new_order::send_initial_message(
-                bot.clone(), dialogue.chat_id()).await?;
-            // Show the menu again
-            main_menu(bot, cid).await?;
+                bot.clone(), cid).await?;
         },
         MainMenuItem::ShowMyOrders => {
             let pcid = ui::pcid_or_err(&bot, &mut db, q, &dialogue).await?;
             ui::show_my_orders(
-                bot, db, pcid, chat, q.from.id, dialogue).await?;
+                bot.clone(), db, pcid, chat, q.from.id, dialogue).await?;
+            send_menu_link(bot, cid).await?;
         },
         MainMenuItem::ListActiveOrders => {
             let pcid = ui::pcid_or_err(&bot, &mut db, q, &dialogue).await?;
             ui::list_active_orders(
-                bot, db, pcid, chat, uid, dialogue).await?;
+                bot.clone(), db, pcid, chat, uid, dialogue).await?;
+            send_menu_link(bot, cid).await?;
         },
         MainMenuItem::MyAssignments => {
             let pcid = ui::pcid_or_err(&bot, &mut db, q, &dialogue).await?;
             ui::list_my_assignments(
-                bot, db, pcid, chat, uid, dialogue).await?;
+                bot.clone(), db, pcid, chat, uid, dialogue).await?;
+            send_menu_link(bot, cid).await?;
         }
     }
     Ok(())
 }
+
