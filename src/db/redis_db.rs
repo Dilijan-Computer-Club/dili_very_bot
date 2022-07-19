@@ -296,10 +296,11 @@ to private chat {cid} {uids:?}");
     /// If the order is deleted then the returned order is None
     pub async fn perform_action(
         &mut self,
-        uid: UserId,
+        user: User,
         pcid: ChatId,
         action: Action,
     ) -> Result<(order::Status, Option<Order>), ActionError> {
+        let uid = user.id;
         log::debug!("redis perform_action {uid} {pcid} {action:?}");
 
         let order: Option<Order> =
@@ -323,7 +324,7 @@ to private chat {cid} {uids:?}");
             Ok((order.status(), None))
         } else {
             let mut order = order;
-            let prev_status = order.perform_action(uid, &action)?;
+            let prev_status = order.perform_action(user, &action)?;
                 log::warn!("redis perform_action {uid} {pcid} : {prev_status} => {}", order.status());
             let res = self.update_order(pcid, &order)
                 .await;

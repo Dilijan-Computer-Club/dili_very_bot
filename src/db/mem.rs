@@ -147,7 +147,7 @@ impl Db {
     /// If the order is deleted then the returned order is None
     pub async fn perform_action(
         &mut self,
-        uid: UserId,
+        user: User,
         pcid: ChatId,
         action: Action,
     ) -> Result<(order::Status, Option<Order>), ActionError> {
@@ -159,7 +159,7 @@ impl Db {
                 return Err(ActionError::Other);
             }
             let mut db = db.unwrap();
-            db.perform_action(uid, pcid, &action)
+            db.perform_action(user, pcid, &action)
         }).await;
 
         match res {
@@ -394,10 +394,11 @@ impl InnerDb {
     /// performs the action, returns modified order if successful
     pub fn perform_action(
         &mut self,
-        uid: UserId,
+        user: User,
         pub_chat_id: ChatId,
         action: &Action,
     ) -> Result<(order::Status, Option<Order>), ActionError> {
+        let uid = user.id;
         log::info!("db.perform_action uid = {uid} pub_chat_id = {pub_chat_id}");
         if action.kind == ActionKind::Delete {
             let order = self.find_order(pub_chat_id, action.order_id)
@@ -411,7 +412,7 @@ impl InnerDb {
         } else {
             let order = self.find_order_mut(pub_chat_id, action.order_id)
                 .ok_or(ActionError::OrderNotFound(action.order_id))?;
-            let prev_status = order.perform_action(uid, action)?;
+            let prev_status = order.perform_action(user, action)?;
             Ok((prev_status, Some(order.clone())))
         }
     }

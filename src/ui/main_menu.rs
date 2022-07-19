@@ -2,7 +2,6 @@ use crate::db::Db;
 use crate::ui::{self, HandlerResult, MyDialogue};
 use crate::error::Error;
 use std::time::Duration;
-
 use teloxide::{
     prelude::*,
     payloads::SendMessageSetters,
@@ -115,7 +114,6 @@ trying to handle ShowMyOrders q = {q:?}");
     ui::main_menu::handle_item(
         bot, q, db, &msg.chat, uid, menu_item, dialogue).await?;
     Ok(true)
-
 }
 
 const TEMP_MENU_LINK_TIMEOUT: Duration = Duration::from_millis(60_000);

@@ -8,21 +8,68 @@ use crate::error::Error;
 use crate::ui::{self, MyDialogue};
 use crate::markup;
 use crate::utils;
+use crate::data_gathering;
+
+/// If it's an order query then handle it and return `true`,
+/// otherwise just return `false`
+pub async fn try_handle_query(
+    bot: AutoSend<Bot>,
+    mut db: Db,
+    dialogue: MyDialogue,
+    q: CallbackQuery,
+    data: &str,
+) -> Result<bool, Error> {
+    let action = order::Action::try_parse(data);
+    if action.is_none() {
+        return Ok(false)
+    }
+    let action = action.unwrap();
+
+    log::info!("  got order action from callback query {action:?}");
+    let pcid = data_gathering::pub_chat_id_from_cq(&mut db, q.clone()).await;
+    if let Err(e) = pcid {
+        log::warn!("-> handle_unknown_callback_query pcid: {e:?}");
+        bot.send_message(dialogue.chat_id(), format!("{e}")).await?;
+        // Returning true because it's a right kind of query,
+        // we just failed handling it
+        return Ok(true)
+    }
+    let pcid = pcid.unwrap();
+
+    let user = q.from;
+    let changed = ui::order_action::handle_order_action(
+        bot.clone(), user, pcid, action, db, dialogue).await?;
+
+    if changed {
+        if q.message.is_none() {
+            log::warn!("Message is missing in callback query");
+            return Ok(true)
+        }
+
+        // The order is changed so we better delete the old
+        // messege showing the order
+        let msg = q.message.unwrap();
+        log::info!("deleting old order message {}", msg.id);
+        bot.delete_message(msg.chat.id, msg.id).await?;
+    }
+    Ok(true)
+}
 
 /// Handles order button clicks
 ///
 /// Returns true if order is changed and we need to delete the old message
 /// to avoid confusion
-pub async fn handle_order_action(
+async fn handle_order_action(
     bot: AutoSend<Bot>,
-    uid: UserId,
+    user: User,
     pcid: ChatId,
     action: order::Action,
     mut db: Db,
     dialogue: MyDialogue,
 ) -> Result<bool, Error> {
+    let uid = user.id;
     let action_type = action.kind;
-    let res = db.perform_action(uid, pcid, action).await;
+    let res = db.perform_action(user, pcid, action).await;
     log::info!("db.perform_action => {res:?}");
     if let Err(e) = res {
         log::warn!("handle_order_action perform_action({uid}, {pcid}) => {e:?}");

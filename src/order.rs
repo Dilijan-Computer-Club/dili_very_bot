@@ -154,9 +154,10 @@ impl Order {
     /// be handled by the database instead
     pub fn perform_action(
         &mut self,
-        uid: UserId,
+        user: User,
         action: &Action
     ) -> Result<Status, ActionError> {
+        let uid = user.id;
         if ! self.is_action_permitted(uid, action) {
             return Err(ActionError::NotPermitted)
         }
@@ -172,7 +173,7 @@ impl Order {
                 self.canceled_at = Some(Offset::now());
             },
             ActionKind::AssignToMe => {
-                self.assigned = Some((Offset::now(), uid, None));
+                self.assigned = Some((Offset::now(), uid, Some(user)));
             },
             ActionKind::Unassign => {
                 self.assigned = None;

@@ -73,10 +73,11 @@ async fn handle_callback_query(
     Ok(())
 }
 
+/// Tries to figure out what the query is and appropriately handle it
 async fn handle_unknown_callback_query(
     bot: AutoSend<Bot>,
     q: CallbackQuery,
-    mut db: Db,
+    db: Db,
     dialogue: MyDialogue
 ) -> HandlerResult {
     log::info!("-> handle_callback_query
@@ -89,37 +90,8 @@ query: {q:?}", q.data);
     }
     let data = q.data.clone().unwrap();
 
-    let uid: UserId = q.from.id;
-    let action = order::Action::try_parse(&data);
-    if action.is_none() {
-        return Ok(())
-    }
-    let action = action.unwrap();
-
-    log::info!("  got action from callback query {action:?}");
-    let pcid = data_gathering::pub_chat_id_from_cq(&mut db, q.clone()).await;
-    if let Err(e) = pcid {
-        log::warn!("-> handle_unknown_callback_query pcid: {e:?}");
-        bot.send_message(dialogue.chat_id(), format!("{e}")).await?;
-        return Ok(())
-    }
-    let pcid = pcid.unwrap();
-
-    let changed = ui::order_action::handle_order_action(
-        bot.clone(), uid, pcid, action, db, dialogue).await?;
-
-    if changed {
-        if q.message.is_none() {
-            log::warn!("Message is missing in callback query");
-            return Ok(())
-        }
-
-        // The order is changed so we better delete the old
-        // messege showing the order
-        let msg = q.message.unwrap();
-        log::info!("deleting old order message {}", msg.id);
-        bot.delete_message(msg.chat.id, msg.id).await?;
-    }
+    let _is_handled =  ui::order_action::try_handle_query(
+        bot, db, dialogue, q, &data).await?;
 
     Ok(())
 }
