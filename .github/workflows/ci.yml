@@ -38,4 +38,9 @@ jobs:
         with:
           toolchain: nightly
           command: build
-          args: --release --all-features
+      - name: publish binary
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            target/release/dili_very_bot_rust
