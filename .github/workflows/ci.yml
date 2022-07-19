@@ -14,30 +14,30 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --all-features
-  test:
-    name: test
+  build:
+    name: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
-      - uses: actions-rs/cargo@v1
+      - name: typecheck
+        uses: actions-rs/cargo@v1
+        with:
+          toolchain: nightly
+          command: check
+      - name: test
+        uses: actions-rs/cargo@v1
         with:
           toolchain: nightly
           command: test
-  build:
-    name: build release
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
+      - name: build release binary
+        uses: actions-rs/cargo@v1
+        if: startsWith(github.ref, 'refs/tags/')
         with:
           toolchain: nightly
-      - uses: actions-rs/cargo@v1
-        with:
-          toolchain: nightly
-          command: build
+          command: build --release
       - name: publish binary
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
