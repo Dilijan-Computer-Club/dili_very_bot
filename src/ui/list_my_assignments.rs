@@ -3,7 +3,7 @@ use crate::ui::{self, MyDialogue, HandlerResult};
 use crate::{Chat, Db};
 
 pub async fn list_my_assignments(
-    mut bot: AutoSend<Bot>,
+    bot: AutoSend<Bot>,
     mut db: Db,
     pcid: ChatId,
     chat: &Chat,
@@ -25,7 +25,7 @@ pub async fn list_my_assignments(
         let msg: Option<&str> = None;
         for order in orders.iter() {
             ui::order::send_message(
-                order, &mut bot, uid, chat.id, msg).await?;
+                order, bot.clone(), uid, chat.id, msg).await?;
         }
     }
     Ok(())

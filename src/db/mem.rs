@@ -1,32 +1,51 @@
+#![cfg(feature = "mem_db")]
+
 use tokio::task::spawn_blocking;
 use teloxide::prelude::*;
-use teloxide::types::{User, Chat, MessageKind, MessageCommon, ChatKind,
-                      MessageNewChatMembers, MessageLeftChatMember};
+use teloxide::types::{User, UserId, Chat, ChatKind};
 use std::sync::{Arc, RwLock};
-use std::fmt;
 use std::collections::BTreeMap;
 use crate::error::Error;
 use crate::order::{self, Order, OrderId, Action, ActionKind, Status};
 use crate::order::ActionError;
-use crate::public_chat::PublicChat;
-use crate::db::PubChatFromMsgError;
 
-impl fmt::Display for PubChatFromMsgError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            PubChatFromMsgError::NotInPubChats => {
-                write!(f, "You are not in any public chat with this bot.
-Try writting '/hello' into the public chat you're in to make sure \
-the bot knows you're there")
-            },
-            PubChatFromMsgError::MultipleChats => {
-                // TODO support for multiple chats per user
-                write!(f, "You are in multiple chats. This is not supported yet. Sorry!")
-            },
-            PubChatFromMsgError::Other => {
-                write!(f, "Some error occured")
+#[derive(Clone, Debug)]
+pub struct PublicChat {
+    pub chat: Chat,
+    pub members: Vec<UserId>,
+    pub orders: Vec<Order>,
+}
+
+impl PublicChat {
+    pub fn new(chat: Chat) -> PublicChat {
+        PublicChat {
+            chat,
+            members: Vec::new(),
+            orders: Vec::new(),
+        }
+    }
+
+    pub fn add_user(&mut self, uid: UserId) {
+        log::debug!("-> add_user uid {uid} to chat {}",
+                    self.chat.title().unwrap_or("<noname>"));
+        if ! self.members.iter_mut().any(|id| *id == uid) {
+            log::debug!("adding uid {uid} to chat {}",
+                        self.chat.title().unwrap_or("<noname>"));
+            self.members.push(uid);
+        }
+    }
+
+    pub fn remove_user(&mut self, uid: UserId) {
+        for (ii, id) in self.members.iter().enumerate() {
+            if *id == uid {
+                self.members.remove(ii);
+                break;
             }
         }
+    }
+
+    pub fn has_user(&self, uid: UserId) -> bool {
+        self.members.iter().any(|u| *u == uid)
     }
 }
 
@@ -42,7 +61,7 @@ impl Db {
     }
 
     pub async fn user_public_chats(
-        &self,
+        &mut self,
         uid: UserId,
     ) -> Result<Vec<(ChatId, String)>, Error> {
         let db = self.db.clone();
@@ -72,7 +91,7 @@ impl Db {
         Ok(oid)
     }
 
-    pub async fn debug_stats(&self) -> Result<String, Error> {
+    pub async fn debug_stats(&mut self) -> Result<String, Error> {
         let db = self.db.clone();
         spawn_blocking(move || {
             let db = db.read().map_err(|e| format!("Rlock: {e:?}"))?;
@@ -80,7 +99,7 @@ impl Db {
         }).await.map_err(|e| format!("{e:?}").into()).flatten()
     }
 
-    pub async fn get_user(&self, uid: UserId) -> Result<Option<User>, Error> {
+    pub async fn get_user(&mut self, uid: UserId) -> Result<Option<User>, Error> {
         let db = self.db.clone();
         spawn_blocking(move || {
             let db = db.read().map_err(|e| format!("Rlock: {e:?}"))?;
@@ -89,7 +108,7 @@ impl Db {
     }
 
     pub async fn orders_by_status(
-        &self,
+        &mut self,
         pcid: ChatId,
         status: Status,
     ) -> Result<Vec<Order>, Error> {
@@ -101,7 +120,7 @@ impl Db {
     }
 
     pub async fn active_assignments_to(
-        &self,
+        &mut self,
         pcid: ChatId,
         uid: UserId
     ) -> Result<Vec<Order>, Error> {
@@ -113,7 +132,7 @@ impl Db {
     }
 
     pub async fn orders_submitted_by_user(
-        &self,
+        &mut self,
         pcid: ChatId,
         uid: UserId
     ) -> Result<Vec<Order>, Error> {
@@ -358,7 +377,7 @@ impl InnerDb {
     ) -> Result<order::Status, ActionError> {
         let pub_chat = self.pub_chat_mut(pub_chat_id);
         if pub_chat.is_none() {
-            return Err(ActionError::PubChatNotFound)
+            return Err(ActionError::OrderNotFound(order_id))
         }
         let pub_chat = pub_chat.unwrap();
 
@@ -448,7 +467,7 @@ Weird that we couldn't find pub chat {cid}");
                     c.chat = chat;
                 } else {
                     // chat doesn't exist yet, so save it
-                    let mut chat = PublicChat::new(chat);
+                    let chat = PublicChat::new(chat);
                     self.public_chats.push(chat);
                 }
 

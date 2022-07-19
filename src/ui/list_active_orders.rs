@@ -4,7 +4,7 @@ use crate::ui::{self, MyDialogue, HandlerResult};
 use crate::order;
 
 pub async fn list_active_orders(
-    mut bot: AutoSend<Bot>,
+    bot: AutoSend<Bot>,
     mut db: Db,
     pcid: ChatId,
     chat: &Chat,
@@ -24,7 +24,8 @@ pub async fn list_active_orders(
         };
         let msg: Option<&str> = None;
         for order in orders.iter() {
-            ui::order::send_message(order, &mut bot, uid, chat.id, msg).await?;
+            ui::order::send_message(
+                order, bot.clone(), uid, chat.id, msg).await?;
         }
     }
     Ok(())

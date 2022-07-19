@@ -16,7 +16,7 @@ fn format_status(order: &Order) -> String {
             let (when, _id, who) = order.assigned.as_ref().unwrap();
             let when = time_ago(*when);
             let to_whom = if let Some(user) = who {
-                format!(" to {} ", markup::user_link(&user))
+                format!(" to {} ", markup::user_link(user))
             } else {
                 "".to_string()
             };
@@ -65,7 +65,7 @@ fn format(order: &Order) -> String {
 ///         Note that it is rendered as HTML
 pub async fn send_message<S: AsRef<str>>(
     order: &Order,
-    bot: &mut AutoSend<Bot>,
+    bot: AutoSend<Bot>,
     for_uid: Option<UserId>,
     to_chat_id: ChatId,
     prefix: Option<S>,

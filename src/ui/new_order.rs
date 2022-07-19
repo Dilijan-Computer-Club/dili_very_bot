@@ -10,7 +10,6 @@ use std::num::ParseIntError;
 use std::num::IntErrorKind;
 use crate::error::Error;
 use crate::MyDialogue;
-use crate::data_gathering;
 use serde::{Serialize, Deserialize};
 
 type HandlerResult = Result<(), Error>;
@@ -121,7 +120,7 @@ async fn receive_price(
 }
 
 async fn receive_urgency(
-    mut bot: AutoSend<Bot>,
+    bot: AutoSend<Bot>,
     q: CallbackQuery,
     mut db: Db,
     dialogue: MyDialogue,
@@ -184,7 +183,7 @@ async fn receive_urgency(
         let mut order = order;
         order.id = Some(oid);
 
-        ui::order::send_message(&order, &mut bot, Some(uid), dialogue.chat_id(),
+        ui::order::send_message(&order, bot, Some(uid), dialogue.chat_id(),
             Some("New Order is created! You need to publish it \
 before other people can see it")).await?;
         exit_dialogue(dialogue).await?;
@@ -208,21 +207,21 @@ async fn exit_dialogue(dialogue: MyDialogue) -> HandlerResult {
     Ok(())
 }
 
-/// Tries to find pub chat id
-async fn get_pcid(
-    bot: &mut AutoSend<Bot>,
-    dialogue: &MyDialogue,
-    db: &mut Db,
-    msg: &Message,
-) -> Result<ChatId, Error> {
-    let pcid = data_gathering::pub_chat_id_from_msg(db, msg.clone()).await;
-    match pcid {
-        Err(e) => {
-            log::warn!(" -> recv_desc: Could not get pcid from msg {:?}", &msg);
-            bot.send_message(dialogue.chat_id(), format!("{e}")).await?;
-            Err(format!("{e}").into())
-        },
-        Ok(pcid) => Ok(pcid),
-    }
-}
+// Tries to find pub chat id
+// async fn get_pcid(
+//     bot: AutoSend<Bot>,
+//     dialogue: &MyDialogue,
+//     db: &mut Db,
+//     msg: &Message,
+// ) -> Result<ChatId, Error> {
+//     let pcid = data_gathering::pub_chat_id_from_msg(db, msg.clone()).await;
+//     match pcid {
+//         Err(e) => {
+//             log::warn!(" -> recv_desc: Could not get pcid from msg {:?}", &msg);
+//             bot.send_message(dialogue.chat_id(), format!("{e}")).await?;
+//             Err(format!("{e}").into())
+//         },
+//         Ok(pcid) => Ok(pcid),
+//     }
+// }
 

@@ -14,7 +14,7 @@ use crate::utils;
 /// Returns true if order is changed and we need to delete the old message
 /// to avoid confusion
 pub async fn handle_order_action(
-    mut bot: AutoSend<Bot>,
+    bot: AutoSend<Bot>,
     uid: UserId,
     pcid: ChatId,
     action: order::Action,
@@ -48,11 +48,11 @@ pub async fn handle_order_action(
         },
         order::Status::Published => {
             order_published_notifications(
-                &mut bot, dialogue.chat_id(), pcid, &order).await?;
+                bot, dialogue.chat_id(), pcid, &order).await?;
         },
         order::Status::Assigned => {
             order_assigned_notifications(
-                &mut bot, db, uid,
+                bot, db, uid,
                 pcid, &order).await?;
         },
         order::Status::MarkedAsDelivered => {
@@ -68,12 +68,12 @@ Please confirm it.");
 
             let priv_chat_id: ChatId = ChatId(order.from.id.0 as i64);
             ui::order::send_message(
-                &order, &mut bot, Some(uid), priv_chat_id, Some(msg)).await?;
+                &order, bot, Some(uid), priv_chat_id, Some(msg)).await?;
 
 
         },
         order::Status::DeliveryConfirmed => {
-            delivery_confirmed_notifications(&mut bot, &order).await?;
+            delivery_confirmed_notifications(bot, &order).await?;
         },
     }
 
@@ -86,7 +86,7 @@ Please confirm it.");
 }
 
 pub async fn order_published_notifications(
-    bot: &mut AutoSend<Bot>,
+    bot: AutoSend<Bot>,
     chat_id: ChatId,
     pcid: ChatId,
     order: &Order,
@@ -105,7 +105,7 @@ pub async fn order_published_notifications(
         };
 
         ui::order::send_message(
-            order, bot, uid, chat_id,
+            order, bot.clone(), uid, chat_id,
             Some("New order is published")).await?;
     }
 
@@ -116,7 +116,7 @@ pub async fn order_published_notifications(
     Ok(())
 }
 pub async fn order_assigned_notifications(
-    bot: &mut AutoSend<Bot>,
+    bot: AutoSend<Bot>,
     db: Db,
     uid: UserId,
     pcid: ChatId,
@@ -130,12 +130,12 @@ pub async fn order_assigned_notifications(
 
         let priv_chat_id: ChatId = uid.into();
         ui::order::send_message(
-            order, bot, Some(uid), priv_chat_id, Some(msg)).await?;
+            order, bot.clone(), Some(uid), priv_chat_id, Some(msg)).await?;
 
         // Send a public message sayng the order is taken
         let msg = format!("Order is taken by {assignee_link}");
         ui::order::send_message(
-            order, bot, None, pcid, Some(msg)).await?;
+            order, bot.clone(), None, pcid, Some(msg)).await?;
     }
 
     // Send message to the owner
@@ -158,7 +158,7 @@ your order! Feel free to send them a message.");
 }
 
 pub async fn delivery_confirmed_notifications(
-    bot: &mut AutoSend<Bot>,
+    bot: AutoSend<Bot>,
     order: &Order,
 ) -> Result<(), Error> {
     // Send message to the assignee
@@ -166,7 +166,7 @@ pub async fn delivery_confirmed_notifications(
     let assignee_cid = utils::uid_to_cid(assignee_id);
     if let Some(assignee_cid) = assignee_cid {
         ui::order::send_message(
-            order, bot, Some(assignee_id), assignee_cid,
+            order, bot.clone(), Some(assignee_id), assignee_cid,
             Some("Order delivery is confirmed! Thank you!")).await?;
     } else {
         log::warn!("Assignee {assignee_id} is not user???");

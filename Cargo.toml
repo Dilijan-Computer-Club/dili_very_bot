@@ -5,6 +5,11 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = ["redis_db"]
+redis_db = ["dep:redis"]
+mem_db = []
+
 [dependencies]
 log = "0.4.17"
 pretty_env_logger = { version = "0.4.0", features = [], default-features = false }
@@ -13,6 +18,9 @@ teloxide =  { version = "0.9.2", features = ["macros", "redis-storage"] }
 tokio =    { version = "1.19.2", features = ["macros", "rt-multi-thread"] }
 chrono =   { version = "0.4.19", features = ["clock", "serde"], default-features = false }
 askama_escape = { version = "0.10.3", features = [], default-features = false }
-redis = { version = "0.21.5", features = ["aio", "connection-manager", "tokio-comp"] }
 serde = "1.0.139"
 serde_json = "1.0.82"
+[dependencies.redis]
+version = "0.21.5"
+features = ["aio", "connection-manager", "tokio-comp"]
+optional = true

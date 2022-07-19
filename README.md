@@ -2,6 +2,7 @@
 Telegram bot for managing deliveries to Dilijan
 
 ## TODOs
+ - Redis error when there is only 1 order in chat
  - `/cancel` to stop creating the order, or other things
  - `/help`
  - Edit own orders

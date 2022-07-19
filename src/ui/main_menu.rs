@@ -1,5 +1,6 @@
 use crate::db::Db;
 use crate::ui::{self, HandlerResult, MyDialogue};
+use crate::error::Error;
 
 use teloxide::{
     prelude::*,
@@ -9,7 +10,6 @@ use teloxide::{
         Chat,
     },
 };
-use crate::data_gathering;
 
 #[derive(Clone, Copy, Debug)]
 pub enum MainMenuItem {
@@ -58,56 +58,87 @@ impl MainMenuItem {
           _ => None
         }
     }
+    pub fn kbd_button(&self) -> InlineKeyboardButton {
+        InlineKeyboardButton::callback(self.human_name(), self.id())
+    }
 }
 
 /// Shows the main menu with buttons
 pub async fn main_menu(
     bot: AutoSend<Bot>,
-    msg: Message,
-    mut db: Db,
+    cid: ChatId,
 ) -> HandlerResult {
-    data_gathering::collect_data_from_msg(
-        &mut db, msg.clone()).await?;
-
-    let main_menu_items = if msg.chat.is_private() {
+    let main_menu_items = if cid.is_user() {
         log::info!("-> main_menu private");
         MainMenuItem::private_items()
     } else {
         log::info!("-> main_menu public");
         MainMenuItem::public_items()
     };
-    let main_menu_items = main_menu_items
-        .iter()
-        .map(|item| [InlineKeyboardButton::callback(
-                        item.human_name(), item.id())]);
+    let items = main_menu_items.iter().map(|item| item.kbd_button());
 
-    bot.send_message(msg.chat.id, "Choose your destiny")
-        .reply_markup(InlineKeyboardMarkup::new(main_menu_items)).
-        await?;
+    bot.send_message(cid, "Choose your destiny")
+        .reply_markup(inline_rows_kbd(items))
+        .await?;
 
     Ok(())
 }
 
+/// Give me buttons and I'll give you them aligned as rows in markup
+fn inline_rows_kbd<I: Iterator<Item=InlineKeyboardButton>>(btns: I) -> InlineKeyboardMarkup {
+    InlineKeyboardMarkup::new(btns.map(|i| [i]))
+}
+
+/// Returns true if it was handled, false if it wasn't a menu item
+pub async fn try_handle_item(
+    bot: AutoSend<Bot>,
+    dialogue: MyDialogue,
+    q: &CallbackQuery,
+    db: Db,
+    data: &str,
+) -> Result<bool, Error> {
+    let menu_item = ui::main_menu::MainMenuItem::from_id(data);
+    if menu_item.is_none() {
+        return Ok(false)
+    }
+    let menu_item = menu_item.unwrap();
+
+    let msg = &q.message;
+    if msg.is_none() {
+        log::warn!("CallbackQuery Message is missing when \
+trying to handle ShowMyOrders q = {q:?}");
+        return Ok(false)
+    }
+    let msg = msg.as_ref().unwrap();
+    let uid = q.from.id;
+    ui::main_menu::handle_item(
+        bot, q, db, &msg.chat, uid, menu_item, dialogue).await?;
+    Ok(true)
+
+}
 
 pub async fn handle_item(
     bot: AutoSend<Bot>,
     q: &CallbackQuery,
     mut db: Db,
     chat: &Chat,
-    msg: &Message,
     uid: UserId,
     menu_item: MainMenuItem,
     dialogue: MyDialogue
 ) -> HandlerResult {
+    let cid = dialogue.chat_id();
     log::info!("main_menu = {menu_item:?}");
-    log::info!("-> main_menu-handle_item -- delete_message");
-    bot.delete_message(dialogue.chat_id(), msg.id).await?;
+    if let Some(msg) = &q.message {
+        bot.delete_message(cid, msg.id).await?;
+    }
     match menu_item {
         MainMenuItem::NewOrder => {
             dialogue.update(
                 ui::State::NewOrder(ui::new_order::State::default())).await?;
             ui::new_order::send_initial_message(
-                bot, dialogue.chat_id()).await?;
+                bot.clone(), dialogue.chat_id()).await?;
+            // Show the menu again
+            main_menu(bot, cid).await?;
         },
         MainMenuItem::ShowMyOrders => {
             let pcid = ui::pcid_or_err(&bot, &mut db, q, &dialogue).await?;

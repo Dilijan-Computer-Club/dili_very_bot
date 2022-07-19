@@ -1,6 +1,8 @@
 use teloxide::types::{User, UserId};
 use chrono::Duration;
+use askama_escape::{escape, Html, Escaped};
 use crate::{DateTime, Offset};
+use std::borrow::Cow;
 
 pub fn format_amd(amd: u64) -> String {
     if amd == 0 {
@@ -41,7 +43,6 @@ pub fn user_link(user: &User) -> String {
     link(url, name)
 }
 
-use askama_escape::{escape, Html, Escaped};
 pub fn escape_html(s: &str) -> Escaped<'_, Html> {
     escape(s, Html)
 }
@@ -52,7 +53,7 @@ pub fn time_ago(t: DateTime) -> String {
     if dur.is_zero() {
         return "right now".to_string();
     }
-    let is_future = if dur > Duration::zero() { true} else { false };
+    let is_future = dur > Duration::zero();
     let dur = if is_future { dur } else { -dur };
 
     let amount = human_positive_duration(dur);
@@ -60,10 +61,10 @@ pub fn time_ago(t: DateTime) -> String {
     format!("{amount} {future_or_past}")
 }
 
-/// give me number and a word, I give you plural
-fn pluralize(n: u64, what: &str) -> String {
-    let plur = || { format!("{what}s") };
-    let sing = || { format!("{what}") };
+/// Give me number and a word, I give you plural word
+fn pluralize<'a>(n: u64, what: &'a str) -> Cow<'a, str> {
+    let plur = || -> Cow<'a, str> { format!("{what}s").into() };
+    let sing = || -> Cow<'a, str> { what.into() };
     match n {
         0 => plur(),
         1 => sing(),

@@ -5,44 +5,6 @@ use crate::error::Error;
 use crate::Db;
 use crate::db::PubChatFromMsgError;
 
-// TODO remove
-pub async fn pub_chat_id_from_msg(
-    db: &mut Db,
-    msg: Message,
-) -> Result<ChatId, PubChatFromMsgError> {
-    log::info!("-> pub_chat_id_from_msg");
-
-    // if msg.is public then that's it
-    // otherwise if user is present find them in chats, if there is one
-    //   then that's it
-    // return appropriate error otherwise
-
-    if let ChatKind::Public(_) = msg.chat.kind {
-        return Ok(msg.chat.id)
-    }
-
-    let user = msg.from();
-    if user.is_none() { return Err(PubChatFromMsgError::Other) }
-    let user = user.unwrap();
-
-    let pc = db.user_public_chats(user.id).await;
-    if let Err(e) = pc {
-        log::warn!("pub_chat_id_from_msg: {e:?}");
-        return Err(PubChatFromMsgError::Other)
-    }
-    let pc: Vec<(ChatId, String)> = pc.unwrap();
-
-    if pc.is_empty() {
-        return Err(PubChatFromMsgError::NotInPubChats)
-    }
-    if pc.len() > 1 {
-        return Err(PubChatFromMsgError::MultipleChats)
-    }
-
-    log::info!("-> pub_chat_id_from_msg => {pc:?}");
-    Ok(pc[0].0)
-}
-
 pub async fn pub_chat_id_from_cq(
     db: &mut Db,
     q: CallbackQuery,

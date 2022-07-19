@@ -16,7 +16,6 @@ mod utils;
 mod urgency;
 mod markup;
 mod ui;
-mod public_chat;
 mod data_gathering;
 
 use db::Db;
@@ -25,7 +24,7 @@ use crate::ui::{State, MyDialogue, HandlerResult, MyStorage};
 
 pub type Offset = chrono::offset::Utc;
 pub type DateTime = chrono::DateTime<Offset>;
-const REDIS_URL: &'static str = "redis://127.0.0.1/";
+const REDIS_URL: &str = "redis://127.0.0.1/";
 
 
 fn init_bot() -> Result<Bot, Error> {
@@ -48,39 +47,28 @@ async fn collect_data_handler(db: Db, update: Update, state: State) -> bool {
 async fn handle_callback_query(
     bot: AutoSend<Bot>,
     q: CallbackQuery,
+    dialogue: MyDialogue,
     mut db: Db,
-    dialogue: MyDialogue
 ) -> HandlerResult {
     log::info!("-> handle_callback_query");
     data_gathering::collect_data_from_cq(&mut db, q.clone()).await?;
     log::debug!("   query: {q:?}");
 
-    let uid = q.from.id;
     if q.data.is_none() {
         // Fallback to generic callback query handler
         log::info!("  -> Fallback to generic callback query handler");
         return handle_unknown_callback_query(bot, q, db, dialogue).await;
     }
-    let item = q.data.as_ref().unwrap();
-    let menu_item = ui::main_menu::MainMenuItem::from_id(item);
+    let data = q.data.as_ref().unwrap();
 
-    if menu_item.is_none() {
+    if ! ui::main_menu::try_handle_item(
+        bot.clone(), dialogue.clone(), &q, db.clone(), data).await? {
+
         // Fallback to generic callback query handler
         log::info!("  -> Fallback to generic callback query handler");
         return handle_unknown_callback_query(bot, q, db, dialogue).await;
     }
-    let menu_item = menu_item.unwrap();
 
-    let msg = &q.message;
-    if msg.is_none() {
-        log::warn!("CallbackQuery Message is missing when \
-trying to handle ShowMyOrders q = {q:?}");
-        return Ok(())
-    }
-    let msg = msg.as_ref().unwrap();
-
-    ui::main_menu::handle_item(
-        bot, &q, db, &msg.chat, msg, uid, menu_item, dialogue).await?;
     Ok(())
 }
 
@@ -124,6 +112,7 @@ query: {q:?}", q.data);
             log::warn!("Message is missing in callback query");
             return Ok(())
         }
+
         // The order is changed so we better delete the old
         // messege showing the order
         let msg = q.message.unwrap();

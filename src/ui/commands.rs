@@ -13,21 +13,13 @@ pub enum Command {
     Start,
     #[command(description = "Show main menu")]
     Menu,
-    #[command(description = "Show help")]
-    Help,
     #[command(description = "Debugging")]
     Debug,
-    #[command(description = "List active orders")]
-    ListActiveOrders,
-    #[command(description = "Show my orders")]
-    ListMyOrders,
-    #[command(description = "Make New Order")]
-    MakeNewOrder,
 }
 
 /// Show some debugging info
 ///
-/// TODO limit the displayed information to what's allowed
+/// TODO permissions
 async fn debug_msg(
     bot: AutoSend<Bot>,
     msg: Message,
@@ -45,13 +37,9 @@ pub async fn handle_command(
     db: Db,
 ) -> HandlerResult {
     match command {
-        Command::Start => { ui::main_menu::main_menu(bot, msg, db).await? },
-        Command::Menu  => { ui::main_menu::main_menu(bot, msg, db).await? },
-        Command::Help => {},
+        Command::Start => { ui::main_menu::main_menu(bot, msg.chat.id).await? },
+        Command::Menu  => { ui::main_menu::main_menu(bot, msg.chat.id).await? },
         Command::Debug => { debug_msg(bot, msg, db).await? },
-        Command::ListActiveOrders => {},
-        Command::ListMyOrders => {},
-        Command::MakeNewOrder => {},
     }
     Ok(())
 }

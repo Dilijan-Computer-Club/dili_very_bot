@@ -1,3 +1,5 @@
+#![cfg(feature = "redis_db")]
+
 use teloxide::prelude::*;
 use teloxide::types::{User, Chat};
 use redis;
@@ -234,7 +236,9 @@ insteadd of {}", names.len(), pub_chats.len()).into());
         // TODO optimize later
 
         let orders = self.pub_chat_orders(pcid).await?;
-        Ok(orders.into_iter().filter(|o| {
+        Ok(orders.into_iter()
+           .filter(|o| o.is_active_assignment())
+           .filter(|o| {
             if let Some(assigned) = &o.assigned {
                 assigned.1 == uid
             } else {
@@ -389,7 +393,7 @@ insteadd of {}", names.len(), pub_chats.len()).into());
     }
 }
 
-const PREFIX: &'static str = "dili";
+const PREFIX: &str = "dili";
 
 // unfortunately I don't think it's possible to concat strings in const fn
 const fn users_key() -> &'static str {
