@@ -15,8 +15,7 @@ pub async fn list_active_orders(
     let orders = db.clone()
         .orders_by_status(pcid, order::Status::Published).await?;
     if orders.is_empty() {
-        bot.send_message(cid, "No orders")
-            .await?;
+        ui::text_msg(Some(ui::TEMP_MSG_TIMEOUT), bot, cid, "No active orders").await?;
     } else {
         ui::text_msg(Some(ui::TEMP_MSG_TIMEOUT), bot.clone(), cid,
                           "All active orders:").await?;
