@@ -11,8 +11,6 @@ use teloxide::{
     },
 };
 
-const TEMP_MENU_LINK_TIMEOUT: Duration = ui::TEMP_MSG_LONG_TIMEOUT;
-
 #[derive(Clone, Copy, Debug)]
 pub enum MainMenuItem {
     ListActiveOrders,
@@ -123,13 +121,7 @@ pub async fn send_menu_link(
     cid: ChatId,
 ) -> HandlerResult {
     log::debug!("send_menu_link");
-    let msg: Message = bot.send_message(cid, "Open menu like this: /menu").await?;
-    let msg_id = msg.id;
-    tokio::spawn(async move {
-        log::debug!("send_menu_link deleting the link");
-        tokio::time::sleep(TEMP_MENU_LINK_TIMEOUT).await;
-        let _ = bot.delete_message(cid, msg_id).await;
-    });
+    bot.send_message(cid, "Open menu like this: /menu").await?;
     Ok(())
 }
 
