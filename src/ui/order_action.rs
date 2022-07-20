@@ -90,7 +90,15 @@ async fn handle_order_action(
     if let Err(e) = res {
         log::warn!("handle_order_action perform_action({uid}, {pcid}) => {e:?}");
         // handle error here
-        bot.send_message(dialogue.chat_id(), format!("{e}")).await?;
+        let cid = dialogue.chat_id();
+        if let Ok(m) = bot.send_message(cid, format!("{e}")).await {
+            // It's a temp error
+            tokio::spawn(async move {
+                log::debug!("perform_action error deleting");
+                tokio::time::sleep(ui::TEMP_MSG_TIMEOUT).await;
+                let _ = bot.delete_message(cid, m.id).await;
+            });
+        }
         return Ok(false)
     }
     let (prev_status, order) = res.unwrap();
