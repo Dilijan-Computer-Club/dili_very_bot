@@ -3,6 +3,9 @@ use chrono::Duration;
 use askama_escape::{escape, Html, Escaped};
 use crate::{DateTime, Offset};
 use std::borrow::Cow;
+use std::fmt::Display;
+
+// TODO: can we optimize it by replacing strings with something smarter?
 
 pub fn format_amd(amd: u64) -> String {
     if amd == 0 {
@@ -21,14 +24,13 @@ pub fn format_username(user: &User) -> String {
     };
 
     if let Some(username) = &user.username {
-        format!("@{username} {name}")
+        format!("{name}  @{username}")
     } else {
         name
     }
 }
 
-pub fn link<U: AsRef<str>, N: AsRef<str>>(url: U, name: N) -> String {
-    let name = escape_html(name.as_ref());
+pub fn link<U: AsRef<str>, N: Display>(url: U, name: N) -> String {
     let url = url.as_ref();
     format!("<a href=\"{url}\">{name}</a>")
 }
@@ -40,6 +42,7 @@ pub fn user_url(uid: UserId) -> String {
 pub fn user_link(user: &User) -> String {
     let url = user_url(user.id);
     let name = format_username(user);
+    let name = escape_html(name.as_ref());
     link(url, name)
 }
 
@@ -59,6 +62,11 @@ pub fn time_ago(t: DateTime) -> String {
     let amount = human_positive_duration(dur);
     let future_or_past = if is_future { "from now" } else { "ago" };
     format!("{amount} {future_or_past}")
+}
+
+pub fn bold<S: AsRef<str>>(s: S) -> String {
+    let s = s.as_ref();
+    format!("<b>{s}</b>")
 }
 
 /// Give me number and a word, I give you plural word

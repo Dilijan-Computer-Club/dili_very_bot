@@ -82,11 +82,16 @@ pub async fn collect_data_from_msg(
             handle_left_chat_members(db, cid, payload).await?;
         },
         MessageKind::Common(m) => {
-            if let Some(chat) = &m.sender_chat {
-                db.update_chat(chat.clone()).await?;
+            if let Some(user) = &m.from {
+                log::info!("adding member from common msg to {cid}");
+                db.add_members(cid, vec![user.id]).await?;
             }
         },
-        _ => {},
+        _ => {
+            if let Some(user) = msg.from()  {
+                db.add_members(cid, vec![user.id]).await?;
+            }
+        },
     }
     Ok(())
 }

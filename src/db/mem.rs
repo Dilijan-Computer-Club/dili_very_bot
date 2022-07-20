@@ -363,7 +363,7 @@ impl InnerDb {
         }
         let pub_chat = pub_chat.unwrap();
         Ok(pub_chat.orders.iter()
-            .filter(|o| o.from.id == uid)
+            .filter(|o| o.customer.id == uid)
             .cloned()
             .collect())
     }

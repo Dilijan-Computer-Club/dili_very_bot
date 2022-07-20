@@ -1,7 +1,5 @@
 use std::fmt;
 use teloxide::{ prelude::*, types::User };
-use crate::tg_msg::TgMsg;
-use crate::urgency::Urgency;
 
 mod action_kind;
 mod action;
@@ -33,7 +31,7 @@ impl fmt::Display for OrderId {
 // We probably want this:
 // - name
 // - price
-// - fee
+// - fee / markup
 // - contact --- tg user
 // - note / description
 
@@ -42,14 +40,18 @@ pub struct Order {
     /// Id of this order, None if not persisted in the database
     pub id: Option<OrderId>,
 
+    pub name: String,
+
     /// Original description message
-    pub desc_msg: TgMsg,
+    ///
+    /// We probably don't need it, we just need the text, but whatever
+    pub description_text: String,
 
     /// Roughly how much it is
     pub price_in_drams: u64,
 
-    /// How soon we need it
-    pub urgency: Urgency,
+    /// How much extra the customer is willing to pay
+    pub markup_in_drams: u64,
 
     /// When it was created (not published)
     pub created_at: DateTime,
@@ -58,7 +60,7 @@ pub struct Order {
     pub published_at: Option<DateTime>,
 
     /// Who created this order
-    pub from: User,
+    pub customer: User,
 
     /// When the user was assigned, id of the user that was assigned,
     /// and the user itself it we have it (we might not)
@@ -85,7 +87,7 @@ impl Order {
     }
 
     fn role(&self, uid: UserId) -> Role {
-        if self.from.id == uid {
+        if self.customer.id == uid {
             return Role::Owner;
         }
 
@@ -198,22 +200,15 @@ impl Order {
 mod tests {
     use super::*;
 
-    fn mk_msg() -> (TgMsg, teloxide::types::User) {
-        let msg = TgMsg {
-            chat_id: ChatId(1),
-            message_id: 2,
-            text: "msg text".to_string(),
-        };
-        let from = teloxide::types::User {
+    fn mk_customer() -> teloxide::types::User {
+        teloxide::types::User {
             id: teloxide::types::UserId(1),
             first_name: "firstname".into(),
             last_name: None,
             username: None,
             is_bot: false,
             language_code: None,
-        };
-
-        (msg, from)
+        }
     }
 
     #[test]
@@ -237,17 +232,18 @@ mod tests {
 
         let oid = OrderId(1);
 
-        let (msg, from) = mk_msg();
+        let customer = mk_customer();
         let order = Order {
             id: Some(oid),
-            created_at: chrono::offset::Utc::now(),
+            name: "ordername".to_string(),
             price_in_drams: 0,
+            markup_in_drams: 0,
+            description_text: "order description".to_string(),
+            created_at: chrono::offset::Utc::now(),
             canceled_at: None,
             delivered: None,
             published_at: None,
-            urgency: Urgency::Whenever,
-            desc_msg: msg,
-            from,
+            customer,
             assigned: None,
             delivery_confirmed_at: None,
         };

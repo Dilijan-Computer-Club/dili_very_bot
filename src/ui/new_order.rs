@@ -1,28 +1,37 @@
 use teloxide::{
     prelude::*,
+    types::User,
     dispatching::UpdateHandler,
 };
 
+use serde::{Serialize, Deserialize};
+
+use std::num::ParseIntError;
+use std::num::IntErrorKind;
+
+use crate::error::Error;
+use crate::MyDialogue;
 use crate::db::Db;
 use crate::order::Order;
 use crate::ui;
-use std::num::ParseIntError;
-use std::num::IntErrorKind;
-use crate::error::Error;
-use crate::MyDialogue;
-use serde::{Serialize, Deserialize};
-
 use crate::ui::commands::Command;
 use crate::utils;
+use crate::Offset;
 
 type HandlerResult = Result<(), Error>;
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub enum State {
     #[default]
-    Start, // receive name
-    ReceivedName { name: String },
-    ReceivedPrice { name: String, price: u64, }
+    Start,
+    ReceivedName {
+        name: String },
+    ReceivedPrice {
+        name: String, price: u64, },
+    ReceivedMarkup {
+        name: String, price: u64, markup: u64, },
+    ReceivedDescription {
+        name: String, price: u64, markup: u64, description: String },
 }
 
 pub fn schema() -> UpdateHandler<Error> {
@@ -30,16 +39,15 @@ pub fn schema() -> UpdateHandler<Error> {
     let message_handler = Update::filter_message()
         .branch(dptree::case![State::Start]
                 .endpoint(receive_name))
-        .branch(dptree::case![State::ReceivedName { name }]
-                .endpoint(receive_price));
-
-    let callback_query_handler = Update::filter_callback_query()
+        .branch(dptree::case![State::ReceivedName  { name }]
+                .endpoint(receive_price))
         .branch(dptree::case![State::ReceivedPrice { name, price }]
-                .endpoint(receive_urgency));
+                .endpoint(receive_markup))
+        .branch(dptree::case![State::ReceivedMarkup  { name, price, markup }]
+                .endpoint(receive_description));
 
     dptree::entry()
         .branch(message_handler)
-        .branch(callback_query_handler)
 }
 
 
@@ -50,11 +58,16 @@ pub fn schema() -> UpdateHandler<Error> {
 /// suggesting to create the order in private
 pub async fn start(
     bot: AutoSend<Bot>,
+    db: Db,
     dialogue: MyDialogue,
     cid: ChatId,
     uid: UserId,
 ) -> HandlerResult {
     if cid.is_user() {
+        // Make sure user's in a public chat before asking them anything
+        let _ = pub_chat_or_bail(bot.clone(), dialogue.clone(), db, cid, uid)
+            .await?;
+
         dialogue.update(
             ui::State::NewOrder(ui::new_order::State::default())).await?;
         ui::new_order::send_initial_message(
@@ -85,11 +98,11 @@ pub async fn start(
 /// Send the first message of the dialogue for creating new order.
 ///
 /// Must be sent only in a private chat
-pub async fn send_initial_message(
+async fn send_initial_message(
     bot: AutoSend<Bot>,
     cid: ChatId)
 -> HandlerResult {
-    if ! cid.is_user() {
+    if !cid.is_user() {
         let msg = format!("Cannot send initial new_order \
 message in a public chat {cid}");
         log::warn!("{}", msg);
@@ -102,7 +115,6 @@ message in a public chat {cid}");
 async fn receive_name(
     bot: AutoSend<Bot>,
     msg: Message,
-    _db: Db,
     dialogue: MyDialogue,
 ) -> HandlerResult {
     log::info!("-> receive_name");
@@ -115,12 +127,21 @@ the name of your order").await?;
     }
     let text = msg.text().unwrap();
 
-    log::info!("Description: {text}");
+    ask_for_price(bot, dialogue.clone()).await?;
+    change_state(
+        dialogue, State::ReceivedName { name: text.to_string() }).await?;
+    log::info!("received name: {text}");
+
+    Ok(())
+}
+
+async fn ask_for_price(
+    bot: AutoSend<Bot>,
+    dialogue: MyDialogue,
+) -> HandlerResult {
     bot.send_message(dialogue.chat_id(),
                      "How much is it in Armenian Drams? \
 A rough estimate is enough. Say 0 if it's already paid for").await?;
-    change_state(dialogue, State::ReceivedName { name: text.to_string() }).await?;
-
     Ok(())
 }
 
@@ -140,20 +161,8 @@ async fn receive_price(
     }
     let text = msg.text().unwrap();
 
-    let price: Result<u64, ParseIntError> = text.parse();
+    let price = parse_price(text);
     if let Err(e) = price {
-        let e = match e.kind() {
-            IntErrorKind::InvalidDigit =>
-                "invalid symbol, only numbers are allowed",
-            IntErrorKind::Empty       => "you haven't written anything",
-            IntErrorKind::PosOverflow => "ain't no one got that much money",
-            IntErrorKind::NegOverflow => "way too little moneys",
-            other => {
-                log::warn!("Weird parse int error: {other:?}");
-                "some weird error occured"
-            },
-
-        };
         bot.send_message(dialogue.chat_id(),
             format!("I don't understand the price - {e}, please try again"))
             .await?;
@@ -161,93 +170,181 @@ async fn receive_price(
     }
     let price = price.unwrap();
 
-    let buttons = ui::urgency::keyboard_markup();
-    bot.send_message(dialogue.chat_id(), "How soon you need it?")
-        .reply_markup(buttons)
-        .await?;
-
-    change_state(dialogue, State::ReceivedPrice { name, price }).await?;
+    ask_for_markup(bot, dialogue.clone()).await?;
+    change_state(
+        dialogue, State::ReceivedPrice { name, price }).await?;
 
     Ok(())
 }
 
-async fn receive_urgency(
+async fn ask_for_markup(
     bot: AutoSend<Bot>,
-    q: CallbackQuery,
-    mut db: Db,
+    dialogue: MyDialogue,
+) -> HandlerResult {
+    bot.send_message(dialogue.chat_id(),
+                     "How much (Drams) will you offer for the delivery?
+It is completely optional, say 0 for no markup.").await?;
+    Ok(())
+}
+
+async fn receive_markup(
+    bot: AutoSend<Bot>,
+    msg: Message,
     dialogue: MyDialogue,
     name_price: (String, u64),
 ) -> HandlerResult {
-    let (name, price) = name_price;
-    log::info!("-> receive_urgency {name} {price}");
-    let data = q.data;
-    if data.is_none() {
-        log::warn!("receive_urgency got callback without data");
+    log::info!("-> receive_markup {name_price:?}");
+    if msg.text().is_none() {
         bot.send_message(dialogue.chat_id(),
-            "Something weird happened, please try again").await?;
-        return Ok(());
+        "Please send me how much above the item price are you \
+willing to pay for the delivery, I've reecived nothing").await?;
+        return Ok(())
     }
-    let data = data.unwrap();
-    log::info!("data = \"{data}\"");
-    let urgency = ui::urgency::from_id(&data);
-    if urgency.is_none() {
-        log::warn!("receive_urgency got invalid urgency {urgency:?}");
-        bot.send_message(dialogue.chat_id(),
-            "Something weird happened, please try again").await?;
-        return Ok(());
-    }
-    let urgency = urgency.unwrap();
-    let uid = q.from.id;
+    let text = msg.text().unwrap();
 
-    // Just for testing
+    let markup = parse_price(text);
+    if let Err(e) = markup {
+        bot.send_message(dialogue.chat_id(),
+            format!("I don't understand the price - {e}, please try again"))
+            .await?;
+        return Ok(())
+    }
+    let markup = markup.unwrap();
+
+    ask_for_description(bot, dialogue.clone()).await?;
+    let (name, price) = name_price;
+    change_state(
+        dialogue, State::ReceivedMarkup { name, price, markup }).await?;
+
+    Ok(())
+}
+
+async fn ask_for_description(
+    bot: AutoSend<Bot>,
+    dialogue: MyDialogue,
+) -> HandlerResult {
+    bot.send_message(dialogue.chat_id(),
+                     "Write some details of the item you want delivered, \
+where to get it from and other important details.").await?;
+    Ok(())
+}
+
+async fn receive_description(
+    bot: AutoSend<Bot>,
+    dialogue: MyDialogue,
+    db: Db,
+    msg: Message,
+    name_price_markup: (String, u64, u64),
+) -> HandlerResult {
+    log::info!("-> receive_description {name_price_markup:?}");
+    if msg.text().is_none() {
+        bot.send_message(dialogue.chat_id(),
+        "Please write a description.
+We don't allow photos or videos right now. Sorry!").await?;
+        return Ok(())
+    }
+    let description_text = msg.text().unwrap().to_string();
+
+    let (name, price_in_drams, markup_in_drams) = name_price_markup;
+    let user = msg.from();
+    if user.is_none() {
+        log::warn!("receive_price No user in msg {msg:?}");
+        return Err(format!("No user is msg {msg:?}").into());
+    }
+    let user = user.unwrap();
+    let order_data = OrderData {
+        name, price_in_drams, markup_in_drams, description_text,
+    };
+    finish_creating_order(
+        bot, db, dialogue, user, order_data).await?;
+
+    Ok(())
+}
+
+struct OrderData {
+    name: String,
+    price_in_drams: u64,
+    markup_in_drams: u64,
+    description_text: String,
+}
+
+/// Gets a public chat or leaves the dialogue
+async fn pub_chat_or_bail(
+    bot: AutoSend<Bot>,
+    dialogue: MyDialogue,
+    mut db: Db,
+    cid: ChatId,
+    uid: UserId,
+) -> Result<(ChatId, String), Error> {
+    let pub_chats = db.user_public_chats(uid).await?;
+
+    if pub_chats.len() == 1 {
+        return Ok(pub_chats[0].clone());
+    }
+
+    if pub_chats.is_empty() {
+        let log_msg = "User {uid} is not in any pub chat";
+        log::warn!("{log_msg}");
+        bot.send_message(cid,
+            format!("I don't see you in any public chats.
+Try sending {} to the public chat I'm in.", Command::Hello)).await?;
+        exit_dialogue(dialogue).await?;
+        ui::main_menu::send_menu_link(bot, cid).await?;
+        return Err(log_msg.into());
+    }
+
+    bot.send_message(cid,
+        format!("You're in multiple public chats {} and \
+we don't support it yet", pub_chats.len())).await?;
+    let msg = "TODO: Support multiple pub chats uid = {uid}";
+    log::warn!("{msg}");
+    exit_dialogue(dialogue).await?;
+    ui::main_menu::send_menu_link(bot, cid).await?;
+    Err(msg.into())
+}
+
+async fn finish_creating_order(
+    bot: AutoSend<Bot>,
+    mut db: Db,
+    dialogue: MyDialogue,
+    user: &User,
+    order_data: OrderData,
+) -> HandlerResult {
+    let OrderData { name, price_in_drams,
+        markup_in_drams, description_text } = order_data;
+    log::info!("-> finish_creating_order {name} \
+{price_in_drams} {markup_in_drams}");
+
     let mut order = Order {
         id: None,
-        desc_msg: crate::tg_msg::TgMsg {
-            chat_id: ChatId(0),
-            message_id: 0,
-            text: name,
-        },
-        urgency,
-        price_in_drams: price,
-        created_at: crate::Offset::now(),
+        name,
+        description_text,
+        price_in_drams,
+        markup_in_drams,
+        created_at: Offset::now(),
         published_at: None,
-        from: q.from,
+        customer: user.clone(),
         assigned: None,
         delivered: None,
         delivery_confirmed_at: None,
         canceled_at: None,
     };
+    let uid = user.id;
 
-    let pub_chats = db.user_public_chats(uid).await?;
-    // TODO handle 0 pub chats too
+    let cid = dialogue.chat_id();
+    let pub_chat = pub_chat_or_bail(
+        bot.clone(), dialogue.clone(), db.clone(), cid, uid).await?;
+    let pcid = pub_chat.0;
+    let oid = db.add_order(pcid, &mut order).await?;
+    let mut order = order;
+    order.id = Some(oid);
 
-    if pub_chats.is_empty() {
-        log::warn!("User {uid} is not in any pub chat");
-        bot.send_message(dialogue.chat_id(),
-            "TODO: I don't see you in any public chats").await?;
-        exit_dialogue(dialogue).await?;
-        return Ok(())
-    }
-
-    if pub_chats.len() == 1 {
-        let cid = dialogue.chat_id();
-        let pcid = pub_chats[0].0;
-        let oid = db.add_order(pcid, &mut order).await?;
-        let mut order = order;
-        order.id = Some(oid);
-
-        ui::order::send_message(db, &order, bot.clone(),
-            Some(uid), dialogue.chat_id(),
-            Some("New Order is created! You need to publish it \
+    ui::order::send_message(db, &order, bot.clone(),
+    Some(uid), dialogue.chat_id(),
+    Some("New Order is created! You need to publish it \
 before other people can see it")).await?;
-        exit_dialogue(dialogue).await?;
-        ui::main_menu::send_menu_link(bot, cid).await?;
-        return Ok(())
-    }
-
-    bot.send_message(dialogue.chat_id(),
-        format!("You're in multiple public chats {} and we don't support it yet", pub_chats.len())).await?;
-    log::warn!("TODO: Support multiple pub chats uid = {uid}");
+    exit_dialogue(dialogue).await?;
+    ui::main_menu::send_menu_link(bot, cid).await?;
 
     Ok(())
 }
@@ -261,3 +358,26 @@ async fn exit_dialogue(dialogue: MyDialogue) -> HandlerResult {
     dialogue.update(ui::State::Start).await?;
     Ok(())
 }
+
+/// Transform int parse error into something more price-speccific
+fn parse_price(text: &str) -> Result<u64, Error> {
+    let price: Result<u64, ParseIntError> = text.parse();
+    match price {
+        Ok(price) => Ok(price),
+        Err(e) => {
+            let e = match e.kind() {
+                IntErrorKind::InvalidDigit => "invalid symbol, only numbers are allowed",
+                IntErrorKind::Empty        => "you haven't written anything",
+                IntErrorKind::PosOverflow  => "ain't no one got that much money",
+                IntErrorKind::NegOverflow  => "way too little moneys",
+                other => {
+                    log::warn!("Weird parse int error: {other:?}");
+                    "some weird error occured"
+                },
+            };
+
+            Err(e.into())
+        }
+    }
+}
+

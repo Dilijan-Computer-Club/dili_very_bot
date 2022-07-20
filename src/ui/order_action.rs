@@ -129,7 +129,7 @@ the publisher confirms they've received it.").await?;
             let msg = format!("{assignee_link} marked order as delivered. \
 Please confirm it.");
 
-            let priv_chat_id: ChatId = ChatId(order.from.id.0 as i64);
+            let priv_chat_id: ChatId = ChatId(order.customer.id.0 as i64);
             ui::order::send_message(
                 db, &order, bot, Some(uid), priv_chat_id, Some(msg)).await?;
 
@@ -162,8 +162,8 @@ pub async fn order_published_notifications(
         // If the chat id value is the same as the owner of the order
         // it means we're in private chat with this user and should
         // show actions according to their permissions
-        let uid = if chat_id.0 == order.from.id.0 as i64 {
-            Some(order.from.id)
+        let uid = if chat_id.0 == order.customer.id.0 as i64 {
+            Some(order.customer.id)
         } else {
             None
         };
@@ -205,7 +205,7 @@ pub async fn order_assigned_notifications(
 
     // Send message to the owner
     {
-        let owner_uid = order.from.id;
+        let owner_uid = order.customer.id;
         let owner_cid = utils::uid_to_cid(owner_uid);
 
         let msg = format!("Congrats! {assignee_link} has agreed to deliver \
@@ -229,7 +229,7 @@ pub async fn delivery_confirmed_notifications(
         db.clone(), order, bot.clone(), Some(assignee_id), assignee_cid,
         Some("Order delivery is confirmed! Thank you!")).await?;
     // Send message to the owner
-    let owner_id = order.from.id;
+    let owner_id = order.customer.id;
     let owner_cid = utils::uid_to_cid(owner_id);
     ui::order::send_message(
         db, order, bot, Some(owner_id), owner_cid,

@@ -10,10 +10,8 @@ use teloxide::{
 
 mod error;
 mod order;
-mod tg_msg;
 mod db;
 mod utils;
-mod urgency;
 mod markup;
 mod ui;
 mod data_gathering;

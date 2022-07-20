@@ -11,7 +11,7 @@ use teloxide::{
     },
 };
 
-const TEMP_MENU_LINK_TIMEOUT: Duration = ui::TEMP_MSG_TIMEOUT;
+const TEMP_MENU_LINK_TIMEOUT: Duration = ui::TEMP_MSG_LONG_TIMEOUT;
 
 #[derive(Clone, Copy, Debug)]
 pub enum MainMenuItem {
@@ -149,7 +149,7 @@ pub async fn handle_item(
     }
     match menu_item {
         MainMenuItem::NewOrder => {
-            ui::new_order::start(bot, dialogue, cid, uid).await?
+            ui::new_order::start(bot, db, dialogue, cid, uid).await?
         },
         MainMenuItem::ShowMyOrders => {
             let pcid = ui::pcid_or_err(&bot, &mut db, q, &dialogue).await?;
@@ -160,7 +160,7 @@ pub async fn handle_item(
         MainMenuItem::ListActiveOrders => {
             let pcid = ui::pcid_or_err(&bot, &mut db, q, &dialogue).await?;
             ui::list_active_orders(
-                bot.clone(), db, pcid, chat, uid, dialogue).await?;
+                bot.clone(), db, pcid, chat, uid).await?;
             send_menu_link(bot, cid).await?;
         },
         MainMenuItem::MyAssignments => {

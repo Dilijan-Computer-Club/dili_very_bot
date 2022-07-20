@@ -80,7 +80,8 @@ pub async fn handle_command(
         Command::Me       => { ui::me::send_me(bot.clone(), db, cid, user).await?; },
         Command::NewOrder => {
             if let Some(user) = user {
-                ui::new_order::start(bot.clone(), dialogue, cid, user.id).await?
+                ui::new_order::start(
+                    bot.clone(), db, dialogue, cid, user.id).await?
             } else {
                 log::warn!("/new_order: could get user from msg {msg:?}");
                 bot.send_message(cid, "We don't know who you are. Thanks Telegram!

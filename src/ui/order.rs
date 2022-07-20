@@ -35,22 +35,37 @@ fn format_status(order: &Order) -> String {
     }
 }
 
-fn format(order: &Order) -> String {
-    let description = markup::escape_html(&order.desc_msg.text);
-    let status = format_status(order);
-    let user_link = markup::user_link(&order.from);
+fn format_name(order: &Order) -> String {
+    let name = markup::escape_html(&order.name).to_string();
+    markup::bold(name)
+}
 
+fn format_description(order: &Order) -> String {
+    markup::escape_html(&order.description_text).to_string()
+}
+
+fn format(order: &Order) -> String {
+    let name        = format_name(order);
+    let description = format_description(order);
+    let status      = format_status(order);
+    let user_link   = markup::user_link(&order.customer);
     let price = markup::format_amd(order.price_in_drams);
-    let urgency = format!("Needed {}", order.urgency.name());
+
+    let markup = if order.markup_in_drams > 0 {
+        format!(" + {} extra",
+                markup::format_amd(order.markup_in_drams))
+    } else {
+        "".to_string()
+    };
 
     let text = format!("\
-{user_link}
-
+{name}
+By {user_link}
 {status}
 
 {description}
 
-{price}  {urgency}
+{price}{markup}
 ");
     text
 }

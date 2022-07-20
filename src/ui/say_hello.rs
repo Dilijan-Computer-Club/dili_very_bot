@@ -5,6 +5,7 @@ use teloxide::{
 use crate::HandlerResult;
 use crate::ui;
 use crate::utils;
+use crate::markup;
 use std::time::Duration;
 
 /// Delete our "hello" sent in a public that after this amount
@@ -24,8 +25,14 @@ so I know you're there.").await?;
     let sent: Message =
         if let Some(user) = user {
             // Confirm that we've received it
-            let sent: Message =
-                bot.send_message(cid, "See you in a private chat!").await?;
+            let sent = {
+                let bot = bot.clone()
+                    .parse_mode(teloxide::types::ParseMode::Html);
+                let mention = markup::user_link(user);
+                let msg = format!("{mention} See you in a private chat!");
+                let sent: Message = bot.send_message(cid, msg).await?;
+                sent
+            };
             // Now say hello in a private chat
             let help = ui::help::help();
             let msg =

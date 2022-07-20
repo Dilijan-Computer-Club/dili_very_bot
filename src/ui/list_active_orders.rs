@@ -1,6 +1,6 @@
 use teloxide::prelude::*;
 use crate::{Db, Chat};
-use crate::ui::{self, MyDialogue, HandlerResult};
+use crate::ui::{self, HandlerResult};
 use crate::order;
 
 pub async fn list_active_orders(
@@ -9,16 +9,16 @@ pub async fn list_active_orders(
     pcid: ChatId,
     chat: &Chat,
     uid: UserId,
-    dialogue: MyDialogue
 ) -> HandlerResult {
     log::info!("-> list_active_orders");
+    let cid = chat.id;
     let orders = db.clone()
         .orders_by_status(pcid, order::Status::Published).await?;
     if orders.is_empty() {
-        bot.send_message(dialogue.chat_id(), "No orders")
+        bot.send_message(cid, "No orders")
             .await?;
     } else {
-        bot.send_message(dialogue.chat_id(), "All active orders:").await?;
+        bot.send_message(cid, "All active orders:").await?;
         let uid = match chat.is_private() {
             true =>  Some(uid),
             false => None,

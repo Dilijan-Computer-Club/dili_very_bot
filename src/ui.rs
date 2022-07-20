@@ -21,7 +21,6 @@ pub use list_active_orders::list_active_orders;
 pub mod commands;
 pub mod order;
 pub mod order_action;
-pub mod urgency;
 pub mod say_hello;
 pub mod help;
 pub mod me;
@@ -36,9 +35,11 @@ pub type MyDialogue = Dialogue<State, dialogue::ErasedStorage<State>>;
 pub type MyStorage = Arc<dialogue::ErasedStorage<State>>;
 
 use crate::data_gathering;
-
+pub const TEMP_MSG_TIMEOUT_MS: u64 = 60_000;
 pub const TEMP_MSG_TIMEOUT: std::time::Duration =
-    std::time::Duration::from_millis(60_000);
+    std::time::Duration::from_millis(TEMP_MSG_TIMEOUT_MS);
+pub const TEMP_MSG_LONG_TIMEOUT: std::time::Duration =
+    std::time::Duration::from_millis(TEMP_MSG_TIMEOUT_MS * 10);
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub enum State {

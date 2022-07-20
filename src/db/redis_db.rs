@@ -98,7 +98,7 @@ insteadd of {}", names.len(), pub_chats.len()).into());
             .atomic()
             .set(pub_chat_order_key(pcid, oid), serde_json::to_vec(order)?)
             .sadd(pub_chat_orders_key(pcid), oid.0)
-            .sadd(user_orders_key(order.from.id), oid.0)
+            .sadd(user_orders_key(order.customer.id), oid.0)
             .query_async(&mut self.c).await?;
         Ok(oid)
     }
@@ -171,6 +171,7 @@ insteadd of {}", names.len(), pub_chats.len()).into());
         if cid.is_user() {
             log::warn!("add_members trying add members \
 to private chat {cid} {uids:?}");
+            return Ok(())
         }
 
         let uids: Vec<u64> = uids.into_iter().map(|u| u.0).collect();
@@ -213,8 +214,14 @@ to private chat {cid} {uids:?}");
             return Ok(Vec::new())
         }
 
-        let bin_orders: Vec<Vec<u8>> = redis::Cmd::get(order_keys)
-            .query_async(&mut self.c).await.map_err(to_err)?;
+        let bin_orders: Vec<Vec<u8>> =
+            if order_keys.len() == 1 {
+                vec![redis::Cmd::get(order_keys[0].clone())
+                    .query_async(&mut self.c).await.map_err(to_err)?]
+            } else {
+                redis::Cmd::get(order_keys)
+                    .query_async(&mut self.c).await.map_err(to_err)?
+            };
 
         let mut orders: Vec<Order> = Vec::with_capacity(bin_orders.len());
         for bin_o in bin_orders.into_iter() {
@@ -325,7 +332,7 @@ to private chat {cid} {uids:?}");
 
         if action.kind == ActionKind::Delete {
             let res = self.delete_order_unchecked(
-                pcid, order.from.id, action.order_id).await;
+                pcid, order.customer.id, action.order_id).await;
             if let Err(e) = res {
                 log::warn!("perform_action {uid} {pcid} : {e:?}");
                 return Err(ActionError::Other);
@@ -510,4 +517,3 @@ fn pub_chat_order_key(pc: ChatId, oid: OrderId) -> String {
 fn order_msgs_key(oid: OrderId) -> String {
     key(&format!("order_msgs:{oid}"))
 }
-
