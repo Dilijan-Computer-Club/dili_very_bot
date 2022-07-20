@@ -18,7 +18,8 @@ pub async fn list_active_orders(
         bot.send_message(cid, "No orders")
             .await?;
     } else {
-        bot.send_message(cid, "All active orders:").await?;
+        ui::text_msg(Some(ui::TEMP_MSG_TIMEOUT), bot.clone(), cid,
+                          "All active orders:").await?;
         let uid = match chat.is_private() {
             true =>  Some(uid),
             false => None,

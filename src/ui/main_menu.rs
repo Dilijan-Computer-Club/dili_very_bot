@@ -21,9 +21,9 @@ pub enum MainMenuItem {
 impl MainMenuItem {
     pub const fn human_name(&self) -> &'static str {
         match self {
-            MainMenuItem::ListActiveOrders => "List active orders",
-            MainMenuItem::ShowMyOrders     => "My Orders",
-            MainMenuItem::MyAssignments    => "Orders I'm delivering",
+            MainMenuItem::ListActiveOrders => "Undelivered orders 🙏",
+            MainMenuItem::ShowMyOrders     => "Orders I've created 😺",
+            MainMenuItem::MyAssignments    => "Orders I'm delivering 🔄",
             MainMenuItem::NewOrder         => "New Order 🤘",
         }
     }

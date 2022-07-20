@@ -10,13 +10,16 @@ pub async fn list_my_assignments(
     uid: UserId,
     dialogue: MyDialogue
 ) -> HandlerResult {
+    let cid = dialogue.chat_id();
     log::info!("-> list_my_assignments");
     let orders = db.clone().active_assignments_to(pcid, uid).await?;
     if orders.is_empty() {
-        bot.send_message(dialogue.chat_id(), "No assigned orders")
-            .await?;
+        ui::text_msg(Some(ui::TEMP_MSG_TIMEOUT), bot.clone(), cid,
+                     "No assigned orders").await?;
     } else {
-        bot.send_message(dialogue.chat_id(), "Orders assigned to you:").await?;
+
+        ui::text_msg(Some(ui::TEMP_MSG_TIMEOUT), bot.clone(), cid,
+                     "Orders assigned to you:").await?;
         let uid = match chat.is_private() {
             true => Some(uid),
             false => None,
