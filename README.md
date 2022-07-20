@@ -2,19 +2,11 @@
 Telegram bot for managing deliveries to Dilijan
 
 ## TODOs
- - Redis error when there is only 1 order in chat
- - `/cancel` to stop creating the order, or other things
- - `/help`
- - Edit own orders
- - Admin UI
- - Hide outdated orders
+ - Edit own orders ?
  - Support multiple group chats per user (ask chat on order creation)
- - Handle error when user doesn't have a public chat
  - Support multiple languages
- - Notifications to assignees
  - Add optional private instructions for order
- - Persistent storage
- - Subscribe to new orders
+ - Optionally subscribe to new orders
 
 ## Running
 - Put a Telegram bot key into the `key` file
