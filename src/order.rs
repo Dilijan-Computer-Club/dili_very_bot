@@ -18,7 +18,8 @@ use crate::Offset;
 use crate::DateTime;
 use serde::{Serialize, Deserialize};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord,
+         Serialize, Deserialize)]
 #[repr(transparent)]
 pub struct OrderId(pub u64);
 
@@ -217,8 +218,23 @@ mod tests {
 
     #[test]
     fn test_order_status_changes() {
-        let publisher = UserId(1);
-        let assignee = UserId(2);
+        let publisher = User {
+            id: UserId(1),
+            username: Some("publisher".to_string()),
+            first_name: "Publisher".to_string(),
+            last_name: Some("test".to_string()),
+            is_bot: false,
+            language_code: Some("en".to_string()),
+        };
+        let assignee = User {
+            id: UserId(2),
+            username: Some("assignee".to_string()),
+            first_name: "Assignee".to_string(),
+            last_name: Some("test".to_string()),
+            is_bot: false,
+            language_code: Some("am".to_string()),
+        };
+
         let oid = OrderId(1);
 
         let (msg, from) = mk_msg();
@@ -231,12 +247,12 @@ mod tests {
             published_at: None,
             urgency: Urgency::Whenever,
             desc_msg: msg,
-            from: from,
+            from,
             assigned: None,
             delivery_confirmed_at: None,
         };
 
-        let act = |order: &mut Order, action: ActionKind, actor: UserId, expected_status: Status| {
+        let act = |order: &mut Order, action: ActionKind, actor: User, expected_status: Status| {
             order.perform_action(actor, &Action {
                 kind: action, order_id: oid,
             }).unwrap();
@@ -247,19 +263,19 @@ mod tests {
         {
             let mut order = order.clone();
 
-            act(&mut order, ActionKind::Publish,         publisher, Status::Published);
-            act(&mut order, ActionKind::AssignToMe,      assignee,  Status::Assigned);
-            act(&mut order, ActionKind::MarkAsDelivered, assignee,  Status::MarkedAsDelivered);
-            act(&mut order, ActionKind::ConfirmDelivery, publisher, Status::DeliveryConfirmed);
+            act(&mut order, ActionKind::Publish,         publisher.clone(), Status::Published);
+            act(&mut order, ActionKind::AssignToMe,      assignee.clone(),  Status::Assigned);
+            act(&mut order, ActionKind::MarkAsDelivered, assignee.clone(),  Status::MarkedAsDelivered);
+            act(&mut order, ActionKind::ConfirmDelivery, publisher.clone(), Status::DeliveryConfirmed);
         }
 
         // happy path, but confirmed without marking as delivered
         {
             let mut order = order;
 
-            act(&mut order, ActionKind::Publish,         publisher, Status::Published);
-            act(&mut order, ActionKind::AssignToMe,      assignee,  Status::Assigned);
-            act(&mut order, ActionKind::ConfirmDelivery, publisher, Status::DeliveryConfirmed);
+            act(&mut order, ActionKind::Publish,         publisher.clone(), Status::Published);
+            act(&mut order, ActionKind::AssignToMe,      assignee,          Status::Assigned);
+            act(&mut order, ActionKind::ConfirmDelivery, publisher,         Status::DeliveryConfirmed);
         }
     }
 }

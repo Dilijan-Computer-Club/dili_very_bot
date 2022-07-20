@@ -2,12 +2,13 @@
 
 use tokio::task::spawn_blocking;
 use teloxide::prelude::*;
-use teloxide::types::{User, UserId, Chat, ChatKind};
+use teloxide::types::{User, UserId, Chat, ChatKind, MessageId};
 use std::sync::{Arc, RwLock};
-use std::collections::BTreeMap;
+use std::collections::{BTreeSet, BTreeMap};
 use crate::error::Error;
 use crate::order::{self, Order, OrderId, Action, ActionKind, Status};
 use crate::order::ActionError;
+
 
 #[derive(Clone, Debug)]
 pub struct PublicChat {
@@ -220,6 +221,56 @@ impl Db {
             Ok(())
         }).await.map_err(|e| format!("{e:?}").into()).flatten()
     }
+
+    /// Get which messages we've sent that contain this order
+    ///
+    /// Returns pairs of (chat_id, order_id) because we need `chat_id` to
+    /// change or delete these messages
+    pub async fn order_msg_ids(
+        &mut self,
+        oid: OrderId,
+    ) -> Result<Vec<(ChatId, MessageId)>, Error> {
+        let db = self.db.clone();
+        spawn_blocking(move || -> Result<Vec<(ChatId, MessageId)>, Error> {
+            let db = db.read().map_err(|e| format!("lock: {e:?}"))?;
+            let ret = db.order_msgs.get(&oid);
+            if ret.is_none() {
+                return Ok(Vec::new())
+            }
+            let ret = ret.unwrap();
+            let ret: Vec<(ChatId, MessageId)> =
+                ret.iter()
+                .map(|(cid, mid)| (*cid, MessageId { message_id: *mid }))
+                .collect();
+
+            Ok(ret)
+        }).await.map_err(|e| format!("{e:?}").into()).flatten()
+    }
+
+    /// Record new message id, so we can later see it returned
+    /// from `order_msg_ids`
+    pub async fn add_msg_id(
+        &mut self,
+        oid: OrderId,
+        cid: ChatId,
+        mid: MessageId,
+    ) -> Result<(), Error> {
+        let mid: i32 = mid.message_id;
+        let db = self.db.clone();
+        spawn_blocking(move || -> Result<(), Error> {
+            let mut db = db.write().map_err(|e| format!("lock: {e:?}"))?;
+            let order_msgs =
+                if let Some(order_msgs) = db.order_msgs.get_mut(&oid) {
+                    order_msgs
+                } else {
+                    db.order_msgs.insert(oid, BTreeSet::new());
+                    db.order_msgs.get_mut(&oid).unwrap()
+                };
+            order_msgs.insert((cid, mid));
+            Ok(())
+        }).await.map_err(|e| format!("{e:?}").into()).flatten()?;
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -228,14 +279,17 @@ struct InnerDb {
     /// list of known public chats and their members
     public_chats: Vec<PublicChat>,
     users: BTreeMap<UserId, User>,
+    /// Messages sent for order, so we can remove or edit them
+    pub order_msgs: BTreeMap<OrderId, BTreeSet<(ChatId, i32)>>,
 }
 
 impl Default for InnerDb {
     fn default() -> Self {
         InnerDb {
             public_chats: Vec::new(),
-            users: BTreeMap::new(),
-            max_id: OrderId(0),
+            users:        BTreeMap::new(),
+            max_id:       OrderId(0),
+            order_msgs:   BTreeMap::new(),
         }
     }
 }
@@ -533,5 +587,7 @@ Public chats:
         log::info!("{s}");
         s
     }
+
+    
 }
 
