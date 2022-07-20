@@ -11,14 +11,17 @@ pub enum Role {
 impl Role {
     pub const fn allowed_actions(self) -> &'static [ActionKind] {
         match self {
-            Role::Owner =>
-                &[ActionKind::Publish,
-                  ActionKind::Cancel,
-                  ActionKind::ConfirmDelivery,
-                  ActionKind::Delete],
-            Role::Assignee =>
-                &[ActionKind::Unassign,
-                ActionKind::MarkAsDelivered],
+            Role::Owner => &[
+                ActionKind::Publish,
+                ActionKind::Unassign, // Not sure about this
+                ActionKind::Cancel,
+                ActionKind::ConfirmDelivery,
+                ActionKind::Delete
+            ],
+            Role::Assignee => &[
+                ActionKind::Unassign,
+                ActionKind::MarkAsDelivered
+            ],
             Role::UnrelatedUser => &[ActionKind::AssignToMe],
         }
     }

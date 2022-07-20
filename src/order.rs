@@ -118,9 +118,11 @@ impl Order {
                 &[ActionKind::Publish, ActionKind::Delete],
             Status::Published =>
                 &[ActionKind::AssignToMe, ActionKind::Cancel],
-            Status::Assigned =>
-                &[ActionKind::Unassign, ActionKind::MarkAsDelivered,
-                  ActionKind::ConfirmDelivery],
+            Status::Assigned => &[
+                ActionKind::Unassign,
+                ActionKind::MarkAsDelivered,
+                ActionKind::ConfirmDelivery
+            ],
             Status::MarkedAsDelivered =>
                 &[ActionKind::ConfirmDelivery],
             Status::DeliveryConfirmed =>
