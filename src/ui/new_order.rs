@@ -12,6 +12,9 @@ use crate::error::Error;
 use crate::MyDialogue;
 use serde::{Serialize, Deserialize};
 
+use crate::ui::commands::Command;
+use crate::utils;
+
 type HandlerResult = Result<(), Error>;
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
@@ -39,11 +42,60 @@ pub fn schema() -> UpdateHandler<Error> {
         .branch(callback_query_handler)
 }
 
+
+
+/// Start new order in either private or public chat
+///
+/// If the `cid` is a public chat then we send a private message
+/// suggesting to create the order in private
+pub async fn start(
+    bot: AutoSend<Bot>,
+    dialogue: MyDialogue,
+    cid: ChatId,
+    uid: UserId,
+) -> HandlerResult {
+    if cid.is_user() {
+        dialogue.update(
+            ui::State::NewOrder(ui::new_order::State::default())).await?;
+        ui::new_order::send_initial_message(
+            bot.clone(), cid).await?;
+    } else {
+        // It was clicied in a public chat, so:
+        //
+        // 1. Send a private message suggesting to start a new order
+        // 2. Send back a public message suggesting to check
+        //    private messages. We later delete this message.
+        bot.send_message(utils::uid_to_cid(uid),
+        format!("Create new order here with {} command",
+                Command::NewOrder)).await?;
+
+        let msg = bot.send_message(cid, "I've sent you a private message!")
+            .await?;
+
+        let msg_id = msg.id;
+        tokio::spawn(async move {
+            log::debug!("send_menu_link deleting the link");
+            tokio::time::sleep(ui::TEMP_MSG_TIMEOUT).await;
+            let _ = bot.delete_message(cid, msg_id).await;
+        });
+    }
+    Ok(())
+}
+
+/// Send the first message of the dialogue for creating new order.
+///
+/// Must be sent only in a private chat
 pub async fn send_initial_message(
     bot: AutoSend<Bot>,
-    chat_id: ChatId)
+    cid: ChatId)
 -> HandlerResult {
-    bot.send_message(chat_id, "What do you want?").await?;
+    if ! cid.is_user() {
+        let msg = format!("Cannot send initial new_order \
+message in a public chat {cid}");
+        log::warn!("{}", msg);
+        return Err(msg.into())
+    }
+    bot.send_message(cid, "What do you want?").await?;
     Ok(())
 }
 

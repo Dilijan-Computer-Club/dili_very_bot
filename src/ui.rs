@@ -37,6 +37,9 @@ pub type MyStorage = Arc<dialogue::ErasedStorage<State>>;
 
 use crate::data_gathering;
 
+pub const TEMP_MSG_TIMEOUT: std::time::Duration =
+    std::time::Duration::from_millis(60_000);
+
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub enum State {
     #[default]

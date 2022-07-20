@@ -11,6 +11,8 @@ use teloxide::{
     },
 };
 
+const TEMP_MENU_LINK_TIMEOUT: Duration = ui::TEMP_MSG_TIMEOUT;
+
 #[derive(Clone, Copy, Debug)]
 pub enum MainMenuItem {
     ListActiveOrders,
@@ -46,7 +48,8 @@ impl MainMenuItem {
     }
 
     pub const fn public_items() -> &'static [Self] {
-        &[ MainMenuItem::ListActiveOrders ]
+        &[ MainMenuItem::ListActiveOrders,
+           MainMenuItem::NewOrder, ]
     }
 
     pub fn from_id(s: &str) -> Option<MainMenuItem> {
@@ -111,12 +114,9 @@ trying to handle ShowMyOrders q = {q:?}");
     }
     let msg = msg.as_ref().unwrap();
     let uid = q.from.id;
-    ui::main_menu::handle_item(
-        bot, q, db, &msg.chat, uid, menu_item, dialogue).await?;
+    handle_item(bot, q, db, &msg.chat, uid, menu_item, dialogue).await?;
     Ok(true)
 }
-
-const TEMP_MENU_LINK_TIMEOUT: Duration = Duration::from_millis(60_000);
 
 pub async fn send_menu_link(
     bot: AutoSend<Bot>,
@@ -149,10 +149,7 @@ pub async fn handle_item(
     }
     match menu_item {
         MainMenuItem::NewOrder => {
-            dialogue.update(
-                ui::State::NewOrder(ui::new_order::State::default())).await?;
-            ui::new_order::send_initial_message(
-                bot.clone(), cid).await?;
+            ui::new_order::start(bot, dialogue, cid, uid).await?
         },
         MainMenuItem::ShowMyOrders => {
             let pcid = ui::pcid_or_err(&bot, &mut db, q, &dialogue).await?;
