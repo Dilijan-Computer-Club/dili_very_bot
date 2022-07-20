@@ -193,7 +193,8 @@ pub async fn order_assigned_notifications(
     // Send a private message to the order owner
     {
         let bot = bot.clone();
-        let msg = format!("Order is assigned to {assignee_link}");
+        let msg = format!("Order is assigned to {assignee_link},
+Please send them a message to discuss the details");
 
         let priv_chat_id: ChatId = uid.into();
         ui::order::send_message(
@@ -211,7 +212,7 @@ pub async fn order_assigned_notifications(
         let owner_cid = utils::uid_to_cid(owner_uid);
 
         let msg = format!("Congrats! {assignee_link} has agreed to deliver \
-your order! Feel free to send them a message.");
+your order! Please send them a message to discuss the details.");
         ui::order::send_message(
             db, order, bot, Some(owner_uid), owner_cid, Some(msg)).await?;
     }
@@ -230,12 +231,13 @@ pub async fn delivery_confirmed_notifications(
     ui::order::send_message(
         db.clone(), order, bot.clone(), Some(assignee_id), assignee_cid,
         Some("Order delivery is confirmed! Thank you!")).await?;
+
     // Send message to the owner
     let owner_id = order.customer.id;
     let owner_cid = utils::uid_to_cid(owner_id);
-    ui::order::send_message(
-        db, order, bot, Some(owner_id), owner_cid,
-        Some("Order delivery is confirmed!")).await?;
+    ui::text_msg(Some(ui::TEMP_MSG_TIMEOUT), bot, owner_cid,
+        "Order delivery is confirmed!").await?;
+
     Ok(())
 }
 
