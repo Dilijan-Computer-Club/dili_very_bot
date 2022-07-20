@@ -52,7 +52,7 @@ fn format(order: &Order) -> String {
     let price = markup::format_amd(order.price_in_drams);
 
     let markup = if order.markup_in_drams > 0 {
-        format!(" + {} extra",
+        format!("\nReward: {}",
                 markup::format_amd(order.markup_in_drams))
     } else {
         "".to_string()
@@ -65,7 +65,7 @@ By {user_link}
 
 {description}
 
-{price}{markup}
+Item cost: {price}{markup}
 ");
     text
 }
