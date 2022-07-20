@@ -91,14 +91,8 @@ async fn handle_order_action(
         log::warn!("handle_order_action perform_action({uid}, {pcid}) => {e:?}");
         // handle error here
         let cid = dialogue.chat_id();
-        if let Ok(m) = bot.send_message(cid, format!("{e}")).await {
-            // It's a temp error
-            tokio::spawn(async move {
-                log::debug!("perform_action error deleting");
-                tokio::time::sleep(ui::TEMP_MSG_TIMEOUT).await;
-                let _ = bot.delete_message(cid, m.id).await;
-            });
-        }
+        ui::text_msg(Some(ui::TEMP_MSG_FAST_TIMEOUT),
+                     bot, cid, &format!("{e}")).await?;
         return Ok(false)
     }
     let (prev_status, order) = res.unwrap();
@@ -198,6 +192,7 @@ pub async fn order_assigned_notifications(
 
     // Send a private message to the order owner
     {
+        let bot = bot.clone();
         let msg = format!("Order is assigned to {assignee_link}");
 
         let priv_chat_id: ChatId = uid.into();
@@ -207,8 +202,7 @@ pub async fn order_assigned_notifications(
 
         // Send a public message sayng the order is taken
         let msg = format!("Order is taken by {assignee_link}");
-        ui::order::send_message(
-            db.clone(), order, bot.clone(), None, pcid, Some(msg)).await?;
+        ui::html_msg(Some(ui::TEMP_MSG_FAST_TIMEOUT), bot, pcid, &msg).await?;
     }
 
     // Send message to the owner
@@ -261,4 +255,3 @@ async fn get_assignee_link(
     let assignee_link = markup::user_link(&assignee);
     Ok(assignee_link)
 }
-

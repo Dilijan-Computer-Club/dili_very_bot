@@ -82,15 +82,9 @@ pub async fn start(
         format!("Create new order here with {} command",
                 Command::NewOrder)).await?;
 
-        let msg = bot.send_message(cid, "I've sent you a private message!")
-            .await?;
-
-        let msg_id = msg.id;
-        tokio::spawn(async move {
-            log::debug!("send_menu_link deleting the link");
-            tokio::time::sleep(ui::TEMP_MSG_TIMEOUT).await;
-            let _ = bot.delete_message(cid, msg_id).await;
-        });
+        ui::text_msg(
+            Some(ui::TEMP_MSG_TIMEOUT), bot, cid,
+            "I've sent you a private message!").await?;
     }
     Ok(())
 }

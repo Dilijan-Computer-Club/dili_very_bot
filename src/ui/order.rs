@@ -86,7 +86,7 @@ pub async fn send_message<S: AsRef<str>>(
     for_uid: Option<UserId>,
     to_chat_id: ChatId,
     prefix: Option<S>,
-) -> Result<(), Error> {
+) -> Result<Message, Error> {
     let mut text = format(order);
     if let Some(prefix) = prefix {
         let prefix = prefix.as_ref();
@@ -111,7 +111,7 @@ pub async fn send_message<S: AsRef<str>>(
         .reply_markup(buttons).await?;
     let msg_id = MessageId { message_id: msg.id };
     db.add_msg_id(order_id, to_chat_id, msg_id).await?;
-    Ok(())
+    Ok(msg)
 }
 
 fn actions_keyboard_markup(actions: &[Action]) -> InlineKeyboardMarkup {

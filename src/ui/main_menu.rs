@@ -1,7 +1,6 @@
 use crate::db::Db;
 use crate::ui::{self, HandlerResult, MyDialogue};
 use crate::error::Error;
-use std::time::Duration;
 use teloxide::{
     prelude::*,
     payloads::SendMessageSetters,
