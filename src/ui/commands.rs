@@ -21,10 +21,8 @@ pub enum Command {
     NewOrder,
     #[command(description = "Get the bot to know you")]
     Hello,
-    #[command(description = "What the bot knows about you (mostly debugging)")]
+    #[command(description = "What the bot knows about you (mostly for debugging)")]
     Me,
-    #[command(description = "Debugging, this should be deleted")]
-    Debug,
 }
 
 impl Command {
@@ -37,7 +35,6 @@ impl Command {
             Command::NewOrder => "/new_order",
             Command::Hello    => "/hello",
             Command::Me       => "/me",
-            Command::Debug    => "/debug",
         }
     }
 }
@@ -46,19 +43,6 @@ impl fmt::Display for Command {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         write!(f, "{}", self.cmd())
     }
-}
-
-/// Show some debugging info
-///
-/// TODO permissions
-async fn debug_msg(
-    bot: AutoSend<Bot>,
-    msg: Message,
-    mut db: Db,
-) -> HandlerResult {
-    let s = db.debug_stats().await?;
-    bot.send_message(msg.chat.id, s).await?;
-    Ok(())
 }
 
 pub async fn handle_command(
@@ -74,7 +58,6 @@ pub async fn handle_command(
     match command {
         Command::Start    => { ui::main_menu::main_menu(bot.clone(), cid).await? },
         Command::Menu     => { ui::main_menu::main_menu(bot.clone(), cid).await? },
-        Command::Debug    => { debug_msg(bot.clone(), msg, db).await? },
         Command::Hello    => { ui::say_hello::say_hello(bot.clone(), cid, msg.from()).await? },
         Command::Help     => { bot.clone().send_message(cid, ui::help::help()).await?; },
         Command::Me       => { ui::me::send_me(bot.clone(), db, cid, user).await?; },
