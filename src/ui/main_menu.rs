@@ -27,7 +27,7 @@ impl MainMenuItem {
             MainMenuItem::ListActiveOrders => "List active orders",
             MainMenuItem::ShowMyOrders     => "My Orders",
             MainMenuItem::MyAssignments    => "Orders I'm delivering",
-            MainMenuItem::NewOrder         => "New Order",
+            MainMenuItem::NewOrder         => "New Order 🤘",
         }
     }
 
