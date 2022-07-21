@@ -1,6 +1,8 @@
 # Dilivery
 Telegram bot for managing deliveries to Dilijan
 
+Idea: Replace it with a generic classified ad board bot
+
 ## TODOs
  - Edit own orders ?
  - Support multiple group chats per user (ask chat on order creation)
